@@ -27,6 +27,11 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       
+      - name: Set repository name to lowercase
+        id: repo_lowercase
+        run: |
+          echo "repo_name=$(echo ${{ github.repository }} | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
+      
       - name: Build and push Backend
         uses: docker/build-push-action@v5
         with:
@@ -34,9 +39,9 @@ jobs:
           file: ./backend/Dockerfile
           push: true
           tags: |
-            ghcr.io/${{ github.repository }}/backend:latest
-            ghcr.io/${{ github.repository }}/backend:${{ github.sha }}
-          cache-from: type=registry,ref=ghcr.io/${{ github.repository }}/backend:latest
+            ghcr.io/${{ steps.repo_lowercase.outputs.repo_name }}/backend:latest
+            ghcr.io/${{ steps.repo_lowercase.outputs.repo_name }}/backend:${{ github.sha }}
+          cache-from: type=registry,ref=ghcr.io/${{ steps.repo_lowercase.outputs.repo_name }}/backend:latest
           cache-to: type=inline
       
       - name: Build and push Frontend
@@ -46,8 +51,7 @@ jobs:
           file: ./frontend/Dockerfile
           push: true
           tags: |
-            ghcr.io/${{ github.repository }}/frontend:latest
-            ghcr.io/${{ github.repository }}/frontend:${{ github.sha }}
-          cache-from: type=registry,ref=ghcr.io/${{ github.repository }}/frontend:latest
+            ghcr.io/${{ steps.repo_lowercase.outputs.repo_name }}/frontend:latest
+            ghcr.io/${{ steps.repo_lowercase.outputs.repo_name }}/frontend:${{ github.sha }}
+          cache-from: type=registry,ref=ghcr.io/${{ steps.repo_lowercase.outputs.repo_name }}/frontend:latest
           cache-to: type=inline
-
