@@ -1,0 +1,18 @@
+diff --git a/model.patch b/model.patch
+index 120cca2..e69de29 100644
+--- a/model.patch
++++ b/model.patch
+@@ -1,13 +0,0 @@
+-diff --git a/frontend/app/checklists.tsx b/frontend/app/checklists.tsx
+-index d3b8439..7c56da8 100644
+---- a/frontend/app/checklists.tsx
+-+++ b/frontend/app/checklists.tsx
+-@@ -355,7 +355,7 @@ export default function ChecklistsScreen() {
+-           <ScrollView style={styles.modalContent}>
+-             <TextInput
+-               style={styles.templateNameInput}
+--              placeholder="Название ритуала"
+-+              placeholder="Название шаблона"
+-               placeholderTextColor="#A89F91"
+-               value={newTemplateName}
+-               onChangeText={setNewTemplateName}
