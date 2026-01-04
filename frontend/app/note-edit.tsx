@@ -1,0 +1,586 @@
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  TextInput,
+  KeyboardAvoidingView,
+  Platform,
+  ActivityIndicator,
+  ScrollView,
+  NativeSyntheticEvent,
+  TextInputContentSizeChangeEventData,
+  Alert,
+} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
+import { useRouter, useLocalSearchParams } from 'expo-router';
+import { format } from 'date-fns';
+import { ru } from 'date-fns/locale';
+import { useAuthContext } from './_layout';
+import { offlineStorage, OfflineNote } from './utils/offlineStorage';
+import { useOfflineSync } from './hooks/useOfflineSync';
+import { useTheme } from './theme';
+
+const API_URL = process.env.EXPO_PUBLIC_BACKEND_URL || 'http://localhost:8000';
+
+// Компонент линованной бумаги (только для светлой темы)
+const PaperLines = ({ lineCount = 30, isDark = false, showLines = true }: { lineCount?: number; isDark?: boolean; showLines?: boolean }) => {
+  if (isDark || !showLines) return null;
+  
+  return (
+    <View style={paperStyles.linesContainer} pointerEvents="none">
+      {Array.from({ length: lineCount }).map((_, index) => (
+        <View key={index} style={paperStyles.line} />
+      ))}
+    </View>
+  );
+};
+
+const paperStyles = StyleSheet.create({
+  linesContainer: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    paddingTop: 0,
+  },
+  line: {
+    height: 32,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(200, 185, 165, 0.3)',
+    marginHorizontal: 20,
+  },
+});
+
+export default function NoteEditScreen() {
+  const { colors, isDark } = useTheme();
+  const router = useRouter();
+  const params = useLocalSearchParams();
+  const { token } = useAuthContext();
+  const { isOnline, updateUnsyncedCount } = useOfflineSync(token);
+
+  const [title, setTitle] = useState('');
+  const [content, setContent] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [contentHeight, setContentHeight] = useState(100);
+  const lastHeight = useRef(100);
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const initialContent = useRef({ title: '', content: '' });
+
+  const noteId = params.id as string;
+
+  // Загрузка заметки или черновика
+  useEffect(() => {
+    if (noteId) {
+      loadNote(noteId);
+    }
+  }, [noteId]);
+
+  // Автосохранение в IndexedDB при изменении
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (title || content) {
+        offlineStorage.saveNote({
+          id: noteId,
+          title,
+          content,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+          synced: false,
+        }).catch(error => {
+          console.error('Error auto-saving:', error);
+        });
+      }
+    }, 1000);
+
+    return () => clearTimeout(timer);
+  }, [title, content, noteId]);
+
+  // Отслеживание несохранённых изменений
+  useEffect(() => {
+    const hasChanges = 
+      title !== initialContent.current.title || 
+      content !== initialContent.current.content;
+    setHasUnsavedChanges(hasChanges);
+  }, [title, content]);
+
+  const handleBack = () => {
+    if (hasUnsavedChanges && (title.trim() || content.trim())) {
+      Alert.alert(
+        'Несохранённые изменения',
+        'У вас есть несохранённые изменения. Сохранить перед выходом?',
+        [
+          {
+            text: 'Отмена',
+            style: 'cancel',
+          },
+          {
+            text: 'Выйти без сохранения',
+            style: 'destructive',
+            onPress: async () => {
+              // Удаляем пустую заметку если ничего не было сохранено
+              if (!initialContent.current.title && !initialContent.current.content) {
+                try {
+                  if (typeof window !== 'undefined') {
+                    await offlineStorage.deleteNote(noteId);
+                    await updateUnsyncedCount();
+                  }
+                } catch (error) {
+                  console.error('Error deleting note:', error);
+                }
+              }
+              router.back();
+            },
+          },
+          {
+            text: 'Сохранить',
+            onPress: saveNote,
+          },
+        ]
+      );
+    } else {
+      // Если изменений нет, но заметка пустая - удаляем её
+      if (!title.trim() && !content.trim()) {
+        offlineStorage.deleteNote(noteId).catch(console.error);
+        updateUnsyncedCount().catch(console.error);
+      }
+      router.back();
+    }
+  };
+
+  const loadNote = async (id: string) => {
+    setLoading(true);
+    try {
+      // Загружаем из локального хранилища
+      const localNote = await offlineStorage.getNote(id);
+      if (localNote) {
+        setTitle(localNote.title);
+        setContent(localNote.content);
+        initialContent.current = { title: localNote.title, content: localNote.content };
+        const initialHeight = Math.max(100, localNote.content.split('\n').length * 32);
+        setContentHeight(initialHeight);
+        lastHeight.current = initialHeight;
+      }
+
+      // Если онлайн, пробуем обновить с сервера (только для синхронизированных заметок)
+      if (isOnline && token && !id.startsWith('offline_')) {
+        const response = await fetch(`${API_URL}/api/notes/${id}`, {
+          headers: { 'Authorization': `Bearer ${token}` },
+        });
+        if (response.ok) {
+          const note = await response.json();
+          setTitle(note.title);
+          setContent(note.content);
+          initialContent.current = { title: note.title, content: note.content };
+          const initialHeight = Math.max(100, note.content.split('\n').length * 32);
+          setContentHeight(initialHeight);
+          lastHeight.current = initialHeight;
+        }
+      }
+    } catch (error) {
+      console.error('Error loading note:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleContentSizeChange = useCallback((e: NativeSyntheticEvent<TextInputContentSizeChangeEventData>) => {
+    const newHeight = e.nativeEvent.contentSize.height;
+    if (Math.abs(newHeight - lastHeight.current) > 5) {
+      lastHeight.current = newHeight;
+      setContentHeight(newHeight);
+    }
+  }, []);
+
+  const insertCurrentTime = () => {
+    const now = format(new Date(), 'HH:mm, dd MMMM', { locale: ru });
+    setContent(prev => prev + `\n— ${now} —\n`);
+  };
+
+  const saveNote = async () => {
+    if (!title.trim() && !content.trim()) {
+      // Если заметка пустая, просто удаляем её
+      try {
+        if (typeof window !== 'undefined') {
+          await offlineStorage.deleteNote(noteId);
+          await updateUnsyncedCount();
+        }
+        router.back();
+      } catch (error) {
+        console.error('Error deleting empty note:', error);
+      }
+      return;
+    }
+
+    setSaving(true);
+
+    try {
+      const noteData = {
+        id: noteId,
+        title,
+        content,
+        updated_at: new Date().toISOString(),
+      };
+
+      if (isOnline && token) {
+        // Онлайн - отправляем на сервер
+        if (noteId.startsWith('offline_')) {
+          // Новая офлайн заметка - создаём на сервере
+          const response = await fetch(`${API_URL}/api/notes`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${token}`,
+            },
+            body: JSON.stringify({ title, content }),
+          });
+          if (response.ok) {
+            const serverNote = await response.json();
+            // Удаляем старую офлайн версию
+            if (typeof window !== 'undefined') {
+              await offlineStorage.deleteNote(noteId);
+              // Сохраняем серверную версию
+              await offlineStorage.saveNote({
+                ...serverNote,
+                synced: true,
+              });
+            }
+            router.back();
+          }
+        } else {
+          // Существующая заметка - обновляем
+          const response = await fetch(`${API_URL}/api/notes/${noteId}`, {
+            method: 'PUT',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${token}`,
+            },
+            body: JSON.stringify({ title, content }),
+          });
+          if (response.ok) {
+            const updatedNote = await response.json();
+            if (typeof window !== 'undefined') {
+              await offlineStorage.saveNote({
+                ...updatedNote,
+                synced: true,
+              });
+            }
+            router.back();
+          }
+        }
+      } else {
+        // Офлайн - сохраняем локально
+        const offlineNote: OfflineNote = {
+          ...noteData,
+          created_at: new Date().toISOString(),
+          synced: false,
+        };
+        
+        await offlineStorage.saveNote(offlineNote);
+        await updateUnsyncedCount();
+        router.back();
+      }
+    } catch (error) {
+      console.error('Error saving note:', error);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={colors.primary} />
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  return (
+    <SafeAreaView style={[styles.container, { backgroundColor: isDark ? '#1a1a1a' : colors.background }]} edges={['top']}>
+      {/* Хедер */}
+      <View style={[
+        styles.header, 
+        { 
+          backgroundColor: isDark ? '#1a1a1a' : colors.background, 
+          borderBottomColor: isDark ? 'rgba(197, 165, 114, 0.12)' : colors.border,
+        }
+      ]}>
+        <TouchableOpacity 
+          onPress={handleBack}
+          style={styles.closeBtn}
+          activeOpacity={0.7}
+        >
+          <Ionicons 
+            name="arrow-back" 
+            size={24} 
+            color={isDark ? '#a1a1aa' : colors.text} 
+          />
+        </TouchableOpacity>
+        
+        <Text style={[
+          styles.headerTitle,
+          { color: isDark ? '#E8CFA0' : colors.text }
+        ]}>
+          {title || 'Новая запись'}
+        </Text>
+        
+        <TouchableOpacity 
+          onPress={saveNote} 
+          disabled={saving || !title.trim()}
+          style={[
+            styles.saveBtn,
+            isDark && styles.saveBtnDark,
+            (!title.trim() || saving) && styles.saveBtnDisabled,
+            isDark && (!title.trim() || saving) && styles.saveBtnDisabledDark,
+          ]}
+          activeOpacity={0.8}
+        >
+          {saving ? (
+            <ActivityIndicator size="small" color={isDark ? '#1a1a1a' : '#fff'} />
+          ) : (
+            <Text style={[
+              styles.saveBtnText,
+              { color: isDark ? '#1a1a1a' : '#fff' },
+              (!title.trim() || saving) && { color: isDark ? 'rgba(26, 26, 26, 0.5)' : 'rgba(255, 255, 255, 0.7)' },
+            ]}>
+              Сохранить
+            </Text>
+          )}
+        </TouchableOpacity>
+      </View>
+
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        style={styles.content}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
+      >
+        <ScrollView 
+          style={[
+            styles.paperContainer, 
+            { backgroundColor: isDark ? '#1a1a1a' : colors.background }
+          ]}
+          contentContainerStyle={styles.paperContentContainer}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+        >
+          {/* Эффект текстуры бумаги - только для светлой темы */}
+          {!isDark && (
+            <View style={styles.paperBackground}>
+              <View style={[styles.marginLine, { backgroundColor: 'rgba(220, 140, 140, 0.4)' }]} />
+              <PaperLines lineCount={50} isDark={isDark} />
+            </View>
+          )}
+          
+          {/* Область ввода */}
+          <View style={[
+            styles.noteContentArea,
+            isDark && styles.noteContentAreaDark
+          ]}>
+            <TextInput
+              style={[
+                styles.titleInput, 
+                { 
+                  color: isDark ? '#F4F4F5' : colors.text,
+                }
+              ]}
+              placeholder="О чём вы думаете?"
+              placeholderTextColor={isDark ? 'rgba(161, 161, 170, 0.6)' : colors.textSecondary}
+              value={title}
+              onChangeText={setTitle}
+              autoFocus={!title && !content}
+            />
+
+            <TouchableOpacity 
+              style={[
+                styles.timeBtn, 
+                isDark ? styles.timeBtnDark : {},
+                { 
+                  backgroundColor: isDark ? 'rgba(197, 165, 114, 0.12)' : 'rgba(139, 115, 85, 0.1)',
+                  borderColor: isDark ? 'rgba(197, 165, 114, 0.3)' : 'transparent',
+                  borderWidth: isDark ? 1 : 0,
+                }
+              ]} 
+              onPress={insertCurrentTime}
+              activeOpacity={0.7}
+            >
+              <Ionicons 
+                name="time-outline" 
+                size={16} 
+                color={isDark ? '#E8CFA0' : colors.primary} 
+              />
+              <Text style={[
+                styles.timeBtnText, 
+                { color: isDark ? '#E8CFA0' : colors.primary }
+              ]}>
+                Добавить время
+              </Text>
+            </TouchableOpacity>
+
+            <TextInput
+              style={[
+                styles.contentInput, 
+                { 
+                  height: Math.max(100, contentHeight), 
+                  color: isDark ? '#E4E4E7' : colors.text,
+                }
+              ]}
+              placeholder="Запишите свои мысли, чувства, наблюдения..."
+              placeholderTextColor={isDark ? 'rgba(161, 161, 170, 0.5)' : colors.textSecondary}
+              value={content}
+              onChangeText={setContent}
+              multiline
+              textAlignVertical="top"
+              scrollEnabled={false}
+              onContentSizeChange={handleContentSizeChange}
+            />
+          </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#F5F0E6',
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  content: {
+    flex: 1,
+  },
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E8E2D9',
+  },
+  headerTitle: {
+    fontSize: 17,
+    fontWeight: '600',
+    letterSpacing: -0.3,
+  },
+  closeBtn: {
+    paddingVertical: 8,
+    paddingHorizontal: 4,
+  },
+  saveBtn: {
+    backgroundColor: '#8B7355',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 20,
+  },
+  saveBtnDark: {
+    backgroundColor: '#D4B989',
+    shadowColor: '#D4B989',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.5,
+    shadowRadius: 12,
+  },
+  saveBtnDisabled: {
+    backgroundColor: '#C4B8A8',
+    opacity: 0.5,
+  },
+  saveBtnDisabledDark: {
+    backgroundColor: 'rgba(197, 165, 114, 0.25)',
+    shadowOpacity: 0,
+  },
+  saveBtnText: {
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  paperContainer: {
+    flex: 1,
+    backgroundColor: '#FFFEF9',
+  },
+  paperContentContainer: {
+    minHeight: '100%',
+    paddingBottom: 100,
+  },
+  paperBackground: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+  },
+  marginLine: {
+    position: 'absolute',
+    top: 0,
+    bottom: 0,
+    left: 44,
+    width: 1,
+    backgroundColor: 'rgba(220, 140, 140, 0.4)',
+  },
+  noteContentArea: {
+    paddingLeft: 52,
+    paddingRight: 20,
+    paddingTop: 20,
+    paddingBottom: 20,
+  },
+  noteContentAreaDark: {
+    paddingLeft: 20,
+    paddingTop: 20,
+    marginHorizontal: 16,
+    marginTop: 16,
+    backgroundColor: 'rgba(255, 255, 255, 0.04)',
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(197, 165, 114, 0.15)',
+  },
+  titleInput: {
+    fontSize: 24,
+    fontWeight: '500',
+    color: '#4A4136',
+    paddingBottom: 8,
+    letterSpacing: -0.3,
+    lineHeight: 32,
+    fontFamily: Platform.OS === 'ios' ? 'Georgia' : 'serif',
+    // @ts-ignore - web only property
+    outlineWidth: 0,
+  },
+  timeBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 8,
+    marginBottom: 16,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    backgroundColor: 'rgba(139, 115, 85, 0.1)',
+    borderRadius: 12,
+    alignSelf: 'flex-start',
+  },
+  timeBtnDark: {
+    shadowColor: '#C5A572',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+  },
+  timeBtnText: {
+    color: '#8B7355',
+    fontSize: 13,
+    marginLeft: 6,
+    fontWeight: '600',
+  },
+  contentInput: {
+    fontSize: 17,
+    color: '#4A4136',
+    lineHeight: 32,
+    fontFamily: Platform.OS === 'ios' ? 'Georgia' : 'serif',
+    // @ts-ignore - web only property
+    outlineWidth: 0,
+  },
+});

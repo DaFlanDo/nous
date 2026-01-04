@@ -1,0 +1,1131 @@
+
+import React, { useState, useRef, useEffect, useCallback } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  TextInput,
+  TouchableOpacity,
+  FlatList,
+  KeyboardAvoidingView,
+  Platform,
+  ActivityIndicator,
+  Modal,
+  Animated,
+} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
+import { format } from 'date-fns';
+import { ru } from 'date-fns/locale';
+import Markdown from 'react-native-markdown-display';
+import { useAuthContext } from './_layout';
+
+const API_URL = process.env.EXPO_PUBLIC_BACKEND_URL || 'http://localhost:8000';
+
+interface Message {
+  id: string;
+  role: 'user' | 'assistant';
+  content: string;
+  timestamp: Date;
+}
+
+interface ChatSession {
+  id: string;
+  title: string;
+  messages: Message[];
+  created_at: string;
+  updated_at: string;
+}
+
+interface ChecklistSuggestion {
+  items: string[];
+  reasoning: string;
+}
+
+export default function ChatScreen() {
+  const { token } = useAuthContext();
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [inputText, setInputText] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [updatingState, setUpdatingState] = useState(false);
+  const flatListRef = useRef<FlatList>(null);
+  
+  // История сеансов
+  const [sessions, setSessions] = useState<ChatSession[]>([]);
+  const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
+  const [showSessionsModal, setShowSessionsModal] = useState(false);
+  const [loadingSessions, setLoadingSessions] = useState(false);
+  
+  // Предложение чеклиста
+  const [showChecklistSuggestion, setShowChecklistSuggestion] = useState(false);
+  const [checklistSuggestion, setChecklistSuggestion] = useState<ChecklistSuggestion | null>(null);
+  const [loadingChecklist, setLoadingChecklist] = useState(false);
+  
+  // Создание выжимки
+  const [creatingSummary, setCreatingSummary] = useState(false);
+  // Анимация для предложения чеклиста
+  const suggestionAnim = useRef(new Animated.Value(0)).current;
+
+  // Загрузка сессий
+  const fetchSessions = useCallback(async () => {
+    setLoadingSessions(true);
+    try {
+      const response = await fetch(`${API_URL}/api/chat/sessions`, {
+        headers: token ? { 'Authorization': `Bearer ${token}` } : {},
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setSessions(data);
+        
+      }
+    } catch (error) {
+      console.error('Error fetching sessions:', error);
+    } finally {
+      setLoadingSessions(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchSessions();
+  }, [fetchSessions]);
+
+  // Создание новой сессии
+  const createNewSession = async () => {
+    try {
+      const response = await fetch(`${API_URL}/api/chat/sessions`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ title: 'Новый диалог' }),
+      });
+      if (response.ok) {
+        const session = await response.json();
+        setCurrentSessionId(session.id);
+        setMessages([]);
+        fetchSessions();
+        return session.id;
+      }
+    } catch (error) {
+      console.error('Error creating session:', error);
+    }
+    return null;
+  };
+
+  // Загрузка сессии
+  const loadSession = async (sessionId: string) => {
+    try {
+      const response = await fetch(`${API_URL}/api/chat/sessions/${sessionId}`, {
+        headers: token ? { 'Authorization': `Bearer ${token}` } : {},
+      });
+      if (response.ok) {
+        const session = await response.json();
+        setCurrentSessionId(session.id);
+        setMessages(session.messages.map((m: any) => ({
+          ...m,
+          timestamp: new Date(m.created_at),
+        })));
+        setShowSessionsModal(false);
+      }
+    } catch (error) {
+      console.error('Error loading session:', error);
+    }
+  };
+
+  // Удаление сессии
+  const deleteSession = async (sessionId: string) => {
+    try {
+      await fetch(`${API_URL}/api/chat/sessions/${sessionId}`, {
+        method: 'DELETE',
+        headers: token ? { 'Authorization': `Bearer ${token}` } : {},
+      });
+      fetchSessions();
+      if (currentSessionId === sessionId) {
+        setCurrentSessionId(null);
+        setMessages([]);
+      }
+    } catch (error) {
+      console.error('Error deleting session:', error);
+    }
+  };
+
+  // Получение предложений для чеклиста
+  const fetchChecklistSuggestions = async () => {
+    if (messages.length < 2) return;
+    
+    setLoadingChecklist(true);
+    try {
+      const history = messages.map(m => ({
+        role: m.role,
+        content: m.content,}));
+
+      const response = await fetch(`${API_URL}/api/chat/suggest-tasks`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({
+          message: messages[messages.length - 1]?.content || '',
+          history: history.slice(0, -1),
+        }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        if (data.items && data.items.length > 0) {
+          setChecklistSuggestion(data);setShowChecklistSuggestion(true);
+          Animated.spring(suggestionAnim, {
+            toValue: 1,
+            useNativeDriver: true,tension: 50,
+            friction: 7,
+          }).start();
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching checklist suggestions:', error);
+    } finally {
+      setLoadingChecklist(false);
+    }
+  };
+
+  // Принять чеклист
+  const acceptChecklist = async () => {
+    if (!checklistSuggestion) return;
+    
+    try {
+      const today = format(new Date(), 'yyyy-MM-dd');
+      const items = checklistSuggestion.items.map((text, index) => ({
+        id: `${Date.now()}-${index}`,
+        text,
+        completed: false,
+      }));
+
+      await fetch(`${API_URL}/api/checklists`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({
+          date: today,
+          items,
+        }),
+      });
+
+      // Добавляем сообщение об успехе
+      const successMessage: Message = {
+        id: Date.now().toString(),
+        role: 'assistant',
+        content: `✅ Добавлено ${items.length} задач в чеклист на сегодня`,
+        timestamp: new Date(),
+      };
+      setMessages(prev => [...prev, successMessage]);
+      dismissChecklistSuggestion();
+    } catch (error) {
+      console.error('Error adding checklist:', error);
+    }
+  };
+
+  // Отклонить чеклист
+  const dismissChecklistSuggestion = () => {
+    Animated.timing(suggestionAnim, {
+      toValue: 0,
+      duration: 200,
+      useNativeDriver: true,
+    }).start(() => {
+      setShowChecklistSuggestion(false);
+      setChecklistSuggestion(null);
+    });
+  };
+
+  // Создание выжимки
+  const createSummary = async () => {
+    if (!currentSessionId || messages.length < 2) return;
+    
+    setCreatingSummary(true);
+    try {
+      const response = await fetch(`${API_URL}/api/chat/sessions/${currentSessionId}/summary`, {
+        method: 'POST',
+        headers: token ? { 'Authorization': `Bearer ${token}` } : {},
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        const successMessage: Message = {
+          id: Date.now().toString(),
+          role: 'assistant',
+          content: `📝 Выжимка создана и сохранена в записки!\n\n"${data.note.title}"`,
+          timestamp: new Date(),
+        };
+        setMessages(prev => [...prev, successMessage]);}
+    } catch (error) {
+      console.error('Error creating summary:', error);
+    } finally {
+      setCreatingSummary(false);
+    }
+  };
+
+  const sendMessage = async () => {
+    if (!inputText.trim() || loading) return;
+
+    // Создаём сессию если её нет
+    let sessionId = currentSessionId;
+    if (!sessionId) {
+      sessionId = await createNewSession();
+    }
+
+    const userMessage: Message = {
+      id: Date.now().toString(),
+      role: 'user',
+      content: inputText.trim(),
+      timestamp: new Date(),
+    };
+
+    setMessages(prev => [...prev, userMessage]);
+    setInputText('');
+    setLoading(true);
+
+    try {
+      const history = messages.map(m => ({
+        role: m.role,
+        content: m.content,
+      }));
+
+      const response = await fetch(`${API_URL}/api/chat`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({
+          message: userMessage.content,
+          session_id: sessionId,
+          history,
+          update_state: false,
+        }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        const assistantMessage: Message = {
+          id: (Date.now() + 1).toString(),
+          role: 'assistant',
+          content: data.response,
+          timestamp: new Date(),
+        };
+        setMessages(prev => [...prev, assistantMessage]);
+        
+        // Если ИИ предлагает чеклист
+        if (data.suggest_checklist) {
+          fetchChecklistSuggestions();
+        }
+        
+        if (data.state_updated) {
+          const stateMessage: Message = {
+            id: (Date.now() + 2).toString(),
+            role: 'assistant',
+            content: `✓ Состояние обновлено\n${data.state?.analysis || ''}`,
+            timestamp: new Date(),
+          };
+          setMessages(prev => [...prev, stateMessage]);
+        }
+      } else {
+        throw new Error('Failed to get response');
+      }
+    } catch (error) {
+      console.error('Chat error:', error);
+      const errorMessage: Message = {
+        id: (Date.now() + 1).toString(),
+        role: 'assistant',
+        content: 'Извините, что-то пошло не так. Попробуйте ещё раз.',
+        timestamp: new Date(),
+      };
+      setMessages(prev => [...prev, errorMessage]);
+    } finally {
+      setLoading(false);
+      setUpdatingState(false);
+    }
+  };
+
+  const updateStateFromChat = async () => {
+    if (messages.length === 0) return;
+    
+    setUpdatingState(true);
+    try {
+      const history = messages.map(m => ({
+        role: m.role,
+        content: m.content,
+      }));
+
+      const response = await fetch(`${API_URL}/api/chat`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({
+          message: 'Проанализируй мое состояние на основе нашего разговора',
+          session_id: currentSessionId,
+          history,
+          update_state: true,
+        }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        if (data.state_updated) {
+          const stateMessage: Message = {
+            id: Date.now().toString(),
+            role: 'assistant',
+            content: `✓ Состояние обновлено\n${data.state?.analysis || ''}`,
+            timestamp: new Date(),
+          };
+          setMessages(prev => [...prev, stateMessage]);
+        }
+      }
+    } catch (error) {
+      console.error('Update state error:', error);
+    } finally {
+      setUpdatingState(false);
+    }
+  };
+
+  const clearChat = () => {
+    setMessages([]);
+    setCurrentSessionId(null);
+    setShowChecklistSuggestion(false);
+    setChecklistSuggestion(null);
+  };
+
+  useEffect(() => {
+    if (messages.length > 0) {
+      setTimeout(() => {
+        flatListRef.current?.scrollToEnd({ animated: true });
+      }, 100);
+    }
+  }, [messages]);
+
+  const renderMessage = ({ item }: { item: Message }) => (
+    <View
+      style={[
+        styles.messageContainer,
+        item.role === 'user' ? styles.userMessageContainer : styles.assistantMessageContainer,
+      ]}
+    >
+      {item.role === 'assistant' && (
+        <View style={styles.avatarContainer}>
+          <Ionicons name="sparkles" size={16} color="#8B7355" />
+        </View>
+      )}
+      <View
+        style={[
+          styles.messageBubble,
+          item.role === 'user' ? styles.userBubble : styles.assistantBubble,
+        ]}
+      >
+        <Text style={[styles.messageText, item.role === 'user' && styles.userMessageText]}>
+          {item.content}
+        </Text></View>
+    </View>
+  );
+
+  const renderSessionItem = ({ item }: { item: ChatSession }) => (
+    <TouchableOpacity
+      style={[
+        styles.sessionItem,
+        currentSessionId === item.id && styles.sessionItemActive
+      ]}
+      onPress={() => loadSession(item.id)}
+      activeOpacity={0.7}
+    >
+      <View style={styles.sessionInfo}>
+        <Text style={styles.sessionTitle} numberOfLines={1}>{item.title}</Text>
+        <Text style={styles.sessionDate}>
+          {format(new Date(item.updated_at), 'd MMM, HH:mm', { locale: ru })}
+        </Text>
+        <Text style={styles.sessionMessages}>
+          {item.messages?.length || 0} сообщений
+        </Text>
+      </View>
+      <TouchableOpacity
+        style={styles.deleteSessionBtn}
+        onPress={() => deleteSession(item.id)}
+        hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+      >
+        <Ionicons name="trash-outline" size={18} color="#C4B8A8" />
+      </TouchableOpacity>
+    </TouchableOpacity>
+  );
+
+  return (
+    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
+      <View style={styles.header}>
+        <View>
+          <View style={styles.headerRow}>
+            <Text style={styles.headerTitle}>Диалог</Text>
+            <Text style={styles.greekAccent}>νοῦς</Text>
+          </View>
+          <Text style={styles.headerSubtitle}>Nous AI</Text>
+        </View>
+        <View style={styles.headerActions}>
+          <TouchableOpacity 
+            onPress={() => setShowSessionsModal(true)} 
+            style={styles.historyBtn}
+          >
+            <Ionicons name="time-outline" size={20} color="#8B7355" />
+          </TouchableOpacity>
+          {messages.length > 0 && (
+            <>
+              <TouchableOpacity 
+                onPress={createSummary} 
+                style={styles.summaryBtn}
+                disabled={creatingSummary || messages.length < 2}
+              >
+                {creatingSummary ? (
+                  <ActivityIndicator size="small" color="#8B7355" />
+                ) : (
+                  <Ionicons name="document-text-outline" size={20} color="#8B7355" />
+                )}
+              </TouchableOpacity>
+              <TouchableOpacity 
+                onPress={updateStateFromChat} 
+                style={styles.stateBtn}
+                disabled={updatingState}
+              >
+                {updatingState ? (
+                  <ActivityIndicator size="small" color="#8B7355" />
+                ) : (
+                  <Ionicons name="pulse" size={20} color="#8B7355" />
+                )}
+              </TouchableOpacity><TouchableOpacity onPress={clearChat} style={styles.clearBtn}>
+                <Ionicons name="add-outline" size={22} color="#A89F91" />
+              </TouchableOpacity>
+            </>
+          )}
+        </View>
+      </View>
+
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        style={styles.chatContainer}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
+      >
+        {messages.length === 0 ? (
+          <View style={styles.emptyContainer}>
+            <View style={styles.aiIcon}>
+              <Ionicons name="sparkles" size={40} color="#8B7355" />
+            </View>
+            <Text style={styles.emptyTitle}>Nous AI</Text>
+            <Text style={styles.emptyText}>
+              Поделитесь тем, что вас занимает.{"\n"}
+              Я помогу разобраться в мыслях.
+            </Text>
+
+            <View style={styles.suggestions}>
+              <TouchableOpacity
+                style={styles.suggestionBtn}
+                onPress={() => setInputText('Хочу разобраться в своих чувствах...')}
+                activeOpacity={0.7}
+              >
+                <Ionicons name="heart-outline" size={18} color="#8B7355" />
+                <Text style={styles.suggestionBtnText}>Разобраться в чувствах</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.suggestionBtn}
+                onPress={() => setInputText('Помоги мне подвести итоги дня...')}
+                activeOpacity={0.7}
+              >
+                <Ionicons name="sunny-outline" size={18} color="#8B7355" />
+                <Text style={styles.suggestionBtnText}>Подвести итоги дня</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.suggestionBtn}
+                onPress={() => setInputText('Хочу понять, что меня беспокоит...')}
+                activeOpacity={0.7}
+              >
+                <Ionicons name="cloud-outline" size={18} color="#8B7355" />
+                <Text style={styles.suggestionBtnText}>Понять беспокойство</Text>
+              </TouchableOpacity>
+            </View>
+
+            {sessions.length > 0 && (
+              <TouchableOpacity
+                style={styles.viewHistoryBtn}
+                onPress={() => setShowSessionsModal(true)}
+              >
+                <Ionicons name="time-outline" size={18} color="#8B7355" />
+                <Text style={styles.viewHistoryText}>Посмотреть историю диалогов</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        ) : (
+          <FlatList
+            ref={flatListRef}
+            data={messages}
+            renderItem={renderMessage}
+            keyExtractor={item => item.id}
+            contentContainerStyle={styles.messagesList}
+            showsVerticalScrollIndicator={false}
+          />
+        )}
+
+        {/* Предложение чеклиста */}
+        {showChecklistSuggestion && checklistSuggestion && (<Animated.View 
+            style={[
+              styles.checklistSuggestion,
+              {
+                opacity: suggestionAnim,
+                transform: [{
+                  translateY: suggestionAnim.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [50, 0],
+                  }),
+                }],
+              },
+            ]}
+          >
+            <View style={styles.suggestionHeader}>
+              <View style={styles.suggestionIcon}>
+                <Ionicons name="checkbox-outline" size={20} color="#8B7355" />
+              </View>
+              <Text style={styles.suggestionTitle}>Добавить в чеклист?</Text>
+              <TouchableOpacity onPress={dismissChecklistSuggestion} style={styles.dismissBtn}>
+                <Ionicons name="close" size={20} color="#A89F91" />
+              </TouchableOpacity>
+            </View>
+            
+            <Text style={styles.suggestionReasoning}>{checklistSuggestion.reasoning}</Text>
+            
+            <View style={styles.suggestionItems}>
+              {checklistSuggestion.items.map((item, index) => (
+                <View key={index} style={styles.suggestionItemRow}>
+                  <View style={styles.suggestionCheckbox} />
+                  <Text style={styles.suggestionItemText}>{item}</Text>
+                </View>
+              ))}
+            </View>
+            
+            <View style={styles.suggestionActions}>
+              <TouchableOpacity 
+                style={styles.declineBtn} 
+                onPress={dismissChecklistSuggestion}
+              >
+                <Text style={styles.declineBtnText}>Не сейчас</Text>
+              </TouchableOpacity>
+              <TouchableOpacity 
+                style={styles.acceptBtn} 
+                onPress={acceptChecklist}
+              >
+                <Ionicons name="checkmark" size={18} color="#FFFFFF" />
+                <Text style={styles.acceptBtnText}>Добавить</Text>
+              </TouchableOpacity>
+            </View>
+          </Animated.View>
+        )}
+
+        {loading && (
+          <View style={styles.typingIndicator}>
+            <View style={styles.typingDots}>
+              <View style={[styles.dot, styles.dot1]} />
+              <View style={[styles.dot, styles.dot2]} />
+              <View style={[styles.dot, styles.dot3]} />
+            </View>
+            <Text style={styles.typingText}>Думаю...</Text>
+          </View>
+        )}<View style={styles.inputContainer}>
+          <TextInput
+            style={styles.input}
+            placeholder="О чём хотите поговорить?"
+            placeholderTextColor="#A89F91"
+            value={inputText}
+            onChangeText={setInputText}
+            multiline
+            maxLength={2000}
+          />
+          <TouchableOpacity
+            style={[styles.sendButton, (!inputText.trim() || loading) && styles.sendButtonDisabled]}
+            onPress={sendMessage}
+            disabled={!inputText.trim() || loading}
+            activeOpacity={0.7}
+          >
+            <Ionicons name="arrow-up" size={20} color="#FFFFFF" />
+          </TouchableOpacity>
+        </View>
+      </KeyboardAvoidingView>
+
+      {/* Модальное окно истории сеансов */}
+      <Modal visible={showSessionsModal} animationType="slide" transparent={false}>
+        <SafeAreaView style={styles.modalContainer}>
+          <View style={styles.modalHeader}>
+            <TouchableOpacity onPress={() => setShowSessionsModal(false)}>
+              <Text style={styles.modalCloseText}>Закрыть</Text>
+            </TouchableOpacity>
+            <Text style={styles.modalTitle}>История диалогов</Text>
+            <View style={{ width: 24 }} />
+          </View>
+
+          {loadingSessions ? (
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="large" color="#8B7355" /></View>
+          ) : sessions.length === 0 ? (
+            <View style={styles.emptySessionsContainer}>
+              <View style={styles.emptySessionsIcon}>
+                <Ionicons name="chatbubbles-outline" size={48} color="#C4B8A8" />
+              </View>
+              <Text style={styles.emptySessionsText}>Нет сохранённых диалогов</Text>
+              <Text style={styles.emptySessionsSubtext}>
+                Начните новый диалог, отправив первое сообщение
+              </Text>
+            </View>
+          ) : (
+            <FlatList
+              data={sessions}
+              renderItem={renderSessionItem}
+              keyExtractor={item => item.id}
+              contentContainerStyle={styles.sessionsList}
+              showsVerticalScrollIndicator={false}
+            />
+          )}
+        </SafeAreaView>
+      </Modal>
+    </SafeAreaView>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#FAF8F5',
+  },
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 24,
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E8E2D9',
+  },
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    gap: 8,
+  },
+  headerTitle: {
+    fontSize: 22,
+    fontWeight: '300',
+    color: '#5D4E3A',
+    letterSpacing: -0.3,
+  },
+  greekAccent: {
+    fontSize: 14,
+    color: '#C4B8A8',
+    fontStyle: 'italic',
+  },
+  headerSubtitle: {
+    fontSize: 13,
+    color: '#A89F91',
+    marginTop: 3,
+    fontWeight: '500',
+  },
+  clearBtn: {
+    padding: 8,
+  },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  historyBtn: {
+    padding: 8,
+    backgroundColor: '#F0EBE3',
+    borderRadius: 8,
+  },
+  summaryBtn: {
+    padding: 8,
+    backgroundColor: '#F0EBE3',
+    borderRadius: 8,
+  },
+  stateBtn: {
+    padding: 8,
+    backgroundColor: '#F0EBE3',
+    borderRadius: 8,
+  },
+  chatContainer: {
+    flex: 1,
+  },
+  emptyContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 40,
+  },
+  aiIcon: {
+    width: 88,
+    height: 88,
+    borderRadius: 44,
+    backgroundColor: '#F0EBE3',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 28,
+  },
+  emptyTitle: {
+    fontSize: 24,
+    fontWeight: '300',
+    color: '#5D4E3A',
+    marginBottom: 12,
+    letterSpacing: -0.3,
+  },
+  emptyText: {
+    fontSize: 15,
+    color: '#A89F91',
+    textAlign: 'center',
+    lineHeight: 24,
+  },
+  suggestions: {
+    marginTop: 36,
+    width: '100%',
+  },
+  suggestionBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 18,
+    marginBottom: 10,
+    shadowColor: '#8B7355',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 8,
+    elevation: 1,
+  },
+  suggestionBtnText: {
+    color: '#5D4E3A',
+    fontSize: 15,
+    marginLeft: 14,
+  },
+  viewHistoryBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 24,
+    padding: 12,
+  },
+  viewHistoryText: {
+    color: '#8B7355',
+    fontSize: 14,
+    marginLeft: 8,
+    fontWeight: '500',
+  },
+  messagesList: {
+    paddingHorizontal: 20,
+    paddingVertical: 20,
+    paddingBottom: Platform.OS === 'ios' ? 140 : 120,
+  },
+  messageContainer: {
+    marginBottom: 16,
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+  },
+  userMessageContainer: {
+    justifyContent: 'flex-end',
+  },
+  assistantMessageContainer: {
+    justifyContent: 'flex-start',
+  },
+  avatarContainer: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#F0EBE3',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 10,
+  },
+  messageBubble: {
+    maxWidth: '80%',
+    borderRadius: 20,
+    padding: 16,
+  },
+  userBubble: {
+    backgroundColor: '#8B7355',
+    borderBottomRightRadius: 6,
+    marginLeft: 'auto',
+  },
+  assistantBubble: {
+    backgroundColor: '#FFFFFF',
+    borderBottomLeftRadius: 6,
+    shadowColor: '#8B7355',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 8,
+    elevation: 1,
+  },
+  messageText: {
+    fontSize: 15,
+    color: '#5D4E3A',
+    lineHeight: 22,
+  },
+  userMessageText: {
+    color: '#FFFFFF',
+  },
+  // Предложение чеклиста
+  checklistSuggestion: {
+    backgroundColor: '#FFFFFF',
+    marginHorizontal: 20,
+    marginBottom: 12,
+    borderRadius: 20,
+    padding: 20,
+    shadowColor: '#8B7355',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.12,
+    shadowRadius: 16,
+    elevation: 4,
+    borderWidth: 1,
+    borderColor: '#E8E2D9',
+  },
+  suggestionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  suggestionIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#F0EBE3',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  suggestionTitle: {
+    flex: 1,
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#5D4E3A',
+  },
+  dismissBtn: {
+    padding: 4,
+  },
+  suggestionReasoning: {
+    fontSize: 14,
+    color: '#8B7355',
+    lineHeight: 20,
+    marginBottom: 16,
+  },
+  suggestionItems: {
+    marginBottom: 16,
+  },
+  suggestionItemRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 8,
+  },
+  suggestionCheckbox: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    borderWidth: 2,
+    borderColor: '#D4CCC0',
+    marginRight: 12,
+  },
+  suggestionItemText: {
+    flex: 1,
+    fontSize: 14,
+    color: '#5D4E3A',
+  },
+  suggestionActions: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: 12,
+  },
+  declineBtn: {
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 12,
+  },
+  declineBtnText: {
+    color: '#A89F91',
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  acceptBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#8B7355',
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 12,
+    gap: 6,
+  },
+  acceptBtnText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  typingIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+  },
+  typingDots: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginRight: 10,
+  },
+  dot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#C4B8A8',
+    marginRight: 4,
+  },
+  dot1: {
+    opacity: 0.4,
+  },
+  dot2: {
+    opacity: 0.6,
+  },
+  dot3: {
+    opacity: 0.8,
+  },
+  typingText: {
+    color: '#A89F91',
+    fontSize: 13,
+  },
+  inputContainer: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    borderTopWidth: 1,
+    borderTopColor: '#E8E2D9',
+    backgroundColor: '#FAF8F5',
+  },
+  input: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 24,
+    paddingHorizontal: 20,
+    paddingVertical: 14,
+    paddingRight: 48,
+    color: '#5D4E3A',
+    fontSize: 15,
+    maxHeight: 120,
+    marginRight: 12,
+    shadowColor: '#8B7355',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 8,
+    elevation: 1,
+    outlineStyle: 'none' as const,
+  } as any,
+  sendButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#8B7355',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  sendButtonDisabled: {
+    backgroundColor: '#D4CCC0',
+  },
+  modalContainer: {
+    flex: 1,
+    backgroundColor: '#FAF8F5',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E8E2D9',
+  },
+  modalCloseText: {
+    fontSize: 16,
+    color: '#A89F91',
+  },
+  modalTitle: {
+    fontSize: 17,
+    fontWeight: '600',
+    color: '#5D4E3A',
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  sessionsList: {
+    padding: 20,
+    paddingBottom: Platform.OS === 'ios' ? 120 : 100,
+  },
+  sessionItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 12,
+    shadowColor: '#8B7355',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 8,
+    elevation: 1,
+  },
+  sessionItemActive: {
+    borderWidth: 2,
+    borderColor: '#8B7355',
+  },
+  sessionInfo: {
+    flex: 1,
+  },
+  sessionTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#5D4E3A',
+    marginBottom: 4,
+  },
+  sessionDate: {
+    fontSize: 13,
+    color: '#A89F91',
+    marginBottom: 2,
+  },
+  sessionMessages: {
+    fontSize: 12,
+    color: '#C4B8A8',
+  },
+  deleteSessionBtn: {
+    padding: 8,
+  },
+  emptySessionsContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 40,
+  },
+  emptySessionsIcon: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: '#F0EBE3',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  emptySessionsText: {
+    fontSize: 18,
+    fontWeight: '500',
+    color: '#8B7355',
+    marginBottom: 8,
+  },
+  emptySessionsSubtext: {
+    fontSize: 14,
+    color: '#A89F91',
+    textAlign: 'center',
+  },
+});
