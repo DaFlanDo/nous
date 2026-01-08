@@ -144,83 +144,14 @@ export default function NotesScreen() {
     fetchNotes();
   };
 
-  const openNewNote = async () => {
-    try {
-      let newNoteId: string;
-
-      if (isOnline && token) {
-        // Онлайн - создаём сразу на сервере
-        const response = await fetch(`${API_URL}/api/notes`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`,
-          },
-          body: JSON.stringify({ title: '', content: '' }),
-        });
-
-        if (response.ok) {
-          const serverNote = await response.json();
-          newNoteId = serverNote.id;
-          
-          // Сохраняем в IndexedDB для офлайн-доступа
-          if (typeof window !== 'undefined') {
-            await offlineStorage.saveNote({
-              ...serverNote,
-              synced: true,
-            });
-          }
-        } else {
-          throw new Error('Failed to create note on server');
-        }
-      } else {
-        // Офлайн - создаём локально
-        newNoteId = `offline_${Date.now()}`;
-        const newNote: any = {
-          id: newNoteId,
-          title: '',
-          content: '',
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-          synced: false,
-        };
-
-        // Сохраняем в IndexedDB
-        if (typeof window !== 'undefined') {
-          await offlineStorage.saveNote(newNote);
-          await updateUnsyncedCount();
-        }
-      }
-
-      // Переходим на редактирование
-      router.push({
-        pathname: '/note-edit',
-        params: { id: newNoteId }
-      });
-    } catch (error) {
-      console.error('Error creating note:', error);
-      
-      // Если ошибка на сервере, создаём офлайн
-      const offlineId = `offline_${Date.now()}`;
-      const offlineNote: any = {
-        id: offlineId,
-        title: '',
-        content: '',
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-        synced: false,
-      };
-
-      if (typeof window !== 'undefined') {
-        await offlineStorage.saveNote(offlineNote);
-        await updateUnsyncedCount();
-      }
-
-      router.push({
-        pathname: '/note-edit',
-        params: { id: offlineId }
-      });
-    }
+  const openNewNote = () => {
+    // Просто переходим в редактор с новым временным ID
+    // Заметка будет создана только при сохранении с содержимым
+    const newNoteId = `new_${Date.now()}`;
+    router.push({
+      pathname: '/note-edit',
+      params: { id: newNoteId, isNew: 'true' }
+    });
   };
 
   const openEditNote = (note: Note) => {
@@ -553,7 +484,7 @@ const styles = StyleSheet.create({
   },
   listContainer: {
     paddingHorizontal: 24,
-    paddingBottom: Platform.OS === 'ios' ? 120 : 100,
+    paddingBottom: 140,
   },
   noteCard: {
     backgroundColor: '#FFFFFF',
@@ -623,7 +554,7 @@ const styles = StyleSheet.create({
   },
   fab: {
     position: 'absolute',
-    bottom: Platform.OS === 'ios' ? 104 : 84,
+    bottom: 120,
     right: 24,
     width: 60,
     height: 60,

@@ -72,16 +72,19 @@ export default function NoteEditScreen() {
   const initialContent = useRef({ title: '', content: '' });
 
   const noteId = params.id as string;
+  const isNew = params.isNew === 'true';
 
   // Загрузка заметки или черновика
   useEffect(() => {
-    if (noteId) {
+    if (noteId && !isNew) {
       loadNote(noteId);
     }
-  }, [noteId]);
+  }, [noteId, isNew]);
 
-  // Автосохранение в IndexedDB при изменении
+  // Автосохранение в IndexedDB при изменении (только для существующих заметок)
   useEffect(() => {
+    if (isNew) return; // Не автосохраняем новые заметки
+    
     const timer = setTimeout(() => {
       if (title || content) {
         offlineStorage.saveNote({
@@ -98,7 +101,7 @@ export default function NoteEditScreen() {
     }, 1000);
 
     return () => clearTimeout(timer);
-  }, [title, content, noteId]);
+  }, [title, content, noteId, isNew]);
 
   // Отслеживание несохранённых изменений
   useEffect(() => {
@@ -109,7 +112,28 @@ export default function NoteEditScreen() {
   }, [title, content]);
 
   const handleBack = () => {
-    if (hasUnsavedChanges && (title.trim() || content.trim())) {
+    // Если это новая заметка и есть содержимое - предлагаем сохранить
+    if (isNew && (title.trim() || content.trim())) {
+      Alert.alert(
+        'Сохранить заметку?',
+        'Хотите сохранить эту заметку?',
+        [
+          {
+            text: 'Отмена',
+            style: 'cancel',
+          },
+          {
+            text: 'Не сохранять',
+            style: 'destructive',
+            onPress: () => router.back(),
+          },
+          {
+            text: 'Сохранить',
+            onPress: saveNote,
+          },
+        ]
+      );
+    } else if (!isNew && hasUnsavedChanges && (title.trim() || content.trim())) {
       Alert.alert(
         'Несохранённые изменения',
         'У вас есть несохранённые изменения. Сохранить перед выходом?',
@@ -143,8 +167,8 @@ export default function NoteEditScreen() {
         ]
       );
     } else {
-      // Если изменений нет, но заметка пустая - удаляем её
-      if (!title.trim() && !content.trim()) {
+      // Если изменений нет или это пустая новая заметка - просто выходим
+      if (!isNew && !title.trim() && !content.trim()) {
         offlineStorage.deleteNote(noteId).catch(console.error);
         updateUnsyncedCount().catch(console.error);
       }
@@ -197,39 +221,35 @@ export default function NoteEditScreen() {
   }, []);
 
   const insertCurrentTime = () => {
-    const now = format(new Date(), 'HH:mm, dd MMMM', { locale: ru });
-    setContent(prev => prev + `\n— ${now} —\n`);
+    const now = format(new Date(), 'HH:mm:ss, dd MMMM', { locale: ru });
+    const timeStamp = `\n━━━  ${now}  ━━━\n`;
+    setContent(prev => {
+      const newContent = prev + timeStamp;
+      // Принудительно обновляем высоту
+      setTimeout(() => {
+        const lines = newContent.split('\n').length;
+        const newHeight = Math.max(100, lines * 32);
+        setContentHeight(newHeight);
+        lastHeight.current = newHeight;
+      }, 0);
+      return newContent;
+    });
   };
 
   const saveNote = async () => {
     if (!title.trim() && !content.trim()) {
-      // Если заметка пустая, просто удаляем её
-      try {
-        if (typeof window !== 'undefined') {
-          await offlineStorage.deleteNote(noteId);
-          await updateUnsyncedCount();
-        }
-        router.back();
-      } catch (error) {
-        console.error('Error deleting empty note:', error);
-      }
+      // Если заметка пустая, просто выходим без сохранения
+      router.back();
       return;
     }
 
     setSaving(true);
 
     try {
-      const noteData = {
-        id: noteId,
-        title,
-        content,
-        updated_at: new Date().toISOString(),
-      };
-
       if (isOnline && token) {
         // Онлайн - отправляем на сервер
-        if (noteId.startsWith('offline_')) {
-          // Новая офлайн заметка - создаём на сервере
+        if (isNew || noteId.startsWith('new_') || noteId.startsWith('offline_')) {
+          // Новая заметка - создаём на сервере
           const response = await fetch(`${API_URL}/api/notes`, {
             method: 'POST',
             headers: {
@@ -240,10 +260,12 @@ export default function NoteEditScreen() {
           });
           if (response.ok) {
             const serverNote = await response.json();
-            // Удаляем старую офлайн версию
-            if (typeof window !== 'undefined') {
+            // Удаляем старую временную/офлайн версию если была
+            if (typeof window !== 'undefined' && noteId.startsWith('offline_')) {
               await offlineStorage.deleteNote(noteId);
-              // Сохраняем серверную версию
+            }
+            // Сохраняем серверную версию
+            if (typeof window !== 'undefined') {
               await offlineStorage.saveNote({
                 ...serverNote,
                 synced: true,
