@@ -126,6 +126,30 @@ function AppTabs() {
             href: null,
           }}
         />
+        <Tabs.Screen
+          name="hooks"
+          options={{
+            href: null,
+          }}
+        />
+        <Tabs.Screen
+          name="utils"
+          options={{
+            href: null,
+          }}
+        />
+        <Tabs.Screen
+          name="components"
+          options={{
+            href: null,
+          }}
+        />
+        <Tabs.Screen
+          name="+html"
+          options={{
+            href: null,
+          }}
+        />
       </Tabs>
     </SafeAreaProvider>
   );
