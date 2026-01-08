@@ -1,15 +1,188 @@
-# 🖥️ Деплой на VPS
+# 🖥️ Деплой на VPS через Docker
 
-Пошаговая инструкция по развертыванию Nous на VPS сервере **147.45.72.115**.
+Простое развертывание Nous на VPS сервере **147.45.72.115** с помощью Docker.
 
 ## 📋 Предварительные требования
 
 - VPS с Ubuntu 20.04+ (147.45.72.115)
 - Root или sudo доступ
-- SSH ключ для доступа
-- Доменное имя (опционально, для SSL)
 
-## 🚀 Быстрый старт
+## 🚀 Быстрый старт (5 минут)
+
+### 1. Установите Docker на сервере
+
+```bash
+# Подключитесь к серверу
+ssh root@147.45.72.115
+
+# Установите Docker
+curl -fsSL https://get.docker.com -o get-docker.sh
+sh get-docker.sh
+
+# Установите Docker Compose
+curl -L "https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+chmod +x /usr/local/bin/docker-compose
+
+# Проверьте установку
+docker --version
+docker-compose --version
+```
+
+### 2. Клонируйте репозиторий
+
+```bash
+mkdir -p /opt/nous
+cd /opt/nous
+git clone https://github.com/ВАШЕ_ИМЯ/nous.git .
+```
+
+### 3. Создайте .env файл
+
+```bash
+nano .env
+```
+
+Вставьте (измените значения):
+
+```env
+# MongoDB
+MONGO_PASSWORD=your-secure-password-123
+
+# Backend
+ENCRYPTION_KEY=your-32-byte-encryption-key-here
+JWT_SECRET=your-jwt-secret-minimum-32-characters
+OPENAI_API_KEY=sk-proj-your-openai-api-key
+OPENAI_BASE_URL=https://api.openai.com/v1
+
+# Google OAuth
+GOOGLE_CLIENT_ID=your-client-id.apps.googleusercontent.com
+GOOGLE_CLIENT_SECRET=your-client-secret
+
+# CORS и URL
+ALLOWED_ORIGINS=http://147.45.72.115:3000,http://147.45.72.115
+EXPO_PUBLIC_BACKEND_URL=http://147.45.72.115:8000
+```
+
+Генерация ключей:
+```bash
+# ENCRYPTION_KEY (32 байта)
+openssl rand -base64 32
+
+# JWT_SECRET
+openssl rand -hex 32
+```
+
+### 4. Запустите приложение
+
+```bash
+# Соберите и запустите все сервисы
+docker-compose up -d
+
+# Проверьте статус
+docker-compose ps
+
+# Просмотрите логи
+docker-compose logs -f
+```
+
+**Готово!** Приложение доступно:
+- **Frontend**: http://147.45.72.115:3000
+- **Backend API**: http://147.45.72.115:8000
+- **Health check**: http://147.45.72.115:8000/health
+
+## 🔄 Управление
+
+```bash
+# Остановить все
+docker-compose down
+
+# Перезапустить
+docker-compose restart
+
+# Посмотреть логи конкретного сервиса
+docker-compose logs -f backend
+docker-compose logs -f frontend
+
+# Пересобрать и запустить
+docker-compose up -d --build
+
+# Удалить все (включая данные)
+docker-compose down -v
+```
+
+## 📦 Обновление приложения
+
+```bash
+cd /opt/nous
+git pull origin main
+docker-compose up -d --build
+```
+
+## 🔒 Настройка Nginx и SSL (опционально)
+
+### Установка Nginx
+
+```bash
+apt install nginx certbot python3-certbot-nginx
+```
+
+### Конфигурация Nginx
+
+Создайте `/etc/nginx/sites-available/nous`:
+
+```nginx
+server {
+    listen 80;
+    server_name 147.45.72.115;
+
+    location / {
+        proxy_pass http://localhost:3000;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection 'upgrade';
+        proxy_set_header Host $host;
+        proxy_cache_bypass $http_upgrade;
+    }
+
+    location /api {
+        proxy_pass http://localhost:8000;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    }
+}
+```
+
+Активируйте:
+```bash
+ln -s /etc/nginx/sites-available/nous /etc/nginx/sites-enabled/
+rm -f /etc/nginx/sites-enabled/default
+nginx -t
+systemctl reload nginx
+```
+
+Теперь приложение доступно на: **http://147.45.72.115**
+
+### SSL с доменом
+
+Если у вас есть домен (например, `yourdomain.com`):
+
+```bash
+# Получите SSL сертификат
+certbot --nginx -d yourdomain.com
+
+# Обновите .env
+nano /opt/nous/.env
+# Измените:
+# ALLOWED_ORIGINS=https://yourdomain.com
+# EXPO_PUBLIC_BACKEND_URL=https://yourdomain.com/api
+
+# Пересоберите
+docker-compose up -d --build
+```
+
+## 🚀 Старый метод (без Docker)
 
 ### 1. Первоначальная настройка сервера
 
