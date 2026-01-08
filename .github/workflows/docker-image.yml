@@ -30,7 +30,7 @@ jobs:
       - name: Set repository name to lowercase
         id: repo_lowercase
         run: |
-          echo "repo_name=$(echo ${{ github.repository }} | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
+          echo "owner=$(echo ${{ github.repository_owner }} | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
       
       - name: Build and push Backend
         uses: docker/build-push-action@v5
@@ -39,10 +39,8 @@ jobs:
           file: ./backend/Dockerfile
           push: true
           tags: |
-            ghcr.io/${{ steps.repo_lowercase.outputs.repo_name }}/backend:latest
-            ghcr.io/${{ steps.repo_lowercase.outputs.repo_name }}/backend:${{ github.sha }}
-          cache-from: type=registry,ref=ghcr.io/${{ steps.repo_lowercase.outputs.repo_name }}/backend:latest
-          cache-to: type=inline
+            ghcr.io/${{ steps.repo_lowercase.outputs.owner }}/nous-backend:latest
+            ghcr.io/${{ steps.repo_lowercase.outputs.owner }}/nous-backend:${{ github.sha }}
       
       - name: Build and push Frontend
         uses: docker/build-push-action@v5
@@ -51,7 +49,5 @@ jobs:
           file: ./frontend/Dockerfile
           push: true
           tags: |
-            ghcr.io/${{ steps.repo_lowercase.outputs.repo_name }}/frontend:latest
-            ghcr.io/${{ steps.repo_lowercase.outputs.repo_name }}/frontend:${{ github.sha }}
-          cache-from: type=registry,ref=ghcr.io/${{ steps.repo_lowercase.outputs.repo_name }}/frontend:latest
-          cache-to: type=inline
+            ghcr.io/${{ steps.repo_lowercase.outputs.owner }}/nous-frontend:latest
+            ghcr.io/${{ steps.repo_lowercase.outputs.owner }}/nous-frontend:${{ github.sha }}
