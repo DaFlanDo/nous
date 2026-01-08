@@ -2,7 +2,7 @@ import React, { useState, useEffect, createContext, useContext } from 'react';
 import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { StyleSheet, Platform, View, ActivityIndicator } from 'react-native';
-import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import LoginScreen, { useAuth, User, authStorage } from './auth';
 import { ThemeProvider, useTheme } from './theme';
 
@@ -26,13 +26,22 @@ export function useAuthContext() {
 
 function AppTabs() {
   const { colors } = useTheme();
+  const insets = useSafeAreaInsets();
   
   return (
     <SafeAreaProvider>
       <Tabs
         screenOptions={{
           headerShown: false,
-          tabBarStyle: [styles.tabBar, { backgroundColor: colors.background, borderTopColor: colors.border }],
+          tabBarStyle: [
+            styles.tabBar, 
+            { 
+              backgroundColor: colors.background, 
+              borderTopColor: colors.border,
+              paddingBottom: Math.max(insets.bottom, 10),
+              height: 64 + Math.max(insets.bottom, 10),
+            }
+          ],
           tabBarActiveTintColor: colors.primary,
           tabBarInactiveTintColor: colors.textSecondary,
           tabBarLabelStyle: styles.tabBarLabel,
@@ -105,6 +114,18 @@ function AppTabs() {
             href: null,
           }}
         />
+        <Tabs.Screen
+          name="note-edit"
+          options={{
+            href: null,
+          }}
+        />
+        <Tabs.Screen
+          name="theme"
+          options={{
+            href: null,
+          }}
+        />
       </Tabs>
     </SafeAreaProvider>
   );
@@ -150,7 +171,7 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#FAF8F5',
+    backgroundColor: '#F5F1ED',
   },
   tabBar: {
     position: 'absolute',

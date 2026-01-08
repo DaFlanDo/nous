@@ -9,7 +9,14 @@ apt update && apt upgrade -y
 
 # Установка необходимых пакетов
 echo "📦 Installing dependencies..."
-apt install -y git curl nginx python3 python3-pip python3-venv nodejs npm mongodb-community
+apt install -y git curl nginx python3 python3-pip python3-venv nodejs npm gnupg wget
+
+# Установка MongoDB
+echo "🍃 Installing MongoDB..."
+wget -qO - https://www.mongodb.org/static/pgp/server-7.0.asc | apt-key add -
+echo "deb [ arch=amd64,arm64 ] https://repo.mongodb.org/apt/ubuntu jammy/mongodb-org/7.0 multiverse" | tee /etc/apt/sources.list.d/mongodb-org-7.0.list
+apt update
+apt install -y mongodb-org
 
 # Установка Yarn
 echo "📦 Installing Yarn..."
@@ -40,7 +47,7 @@ echo "📥 Cloning repository..."
 echo "🌐 Configuring Nginx..."
 cat > /etc/nginx/sites-available/nous << 'EOF'
 server {
-    listen 80;
+    listen 8001;
     server_name _;
 
     # Frontend
@@ -52,6 +59,7 @@ server {
     # Backend API
     location /api {
         proxy_pass http://localhost:8000;
+        rewrite ^/api/(.*) /$1 break;
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection 'upgrade';
@@ -75,14 +83,14 @@ echo "⚙️  Configuring systemd service..."
 cat > /etc/systemd/system/nous-backend.service << 'EOF'
 [Unit]
 Description=Nous Backend Service
-After=network.target mongodb.service
+After=network.target mongod.service
 
 [Service]
 Type=simple
 User=root
 WorkingDirectory=/opt/nous/backend
-Environment="PATH=/usr/bin:/usr/local/bin"
-ExecStart=/usr/bin/python3 -m uvicorn server:app --host 0.0.0.0 --port 8000
+Environment="PATH=/opt/nous/backend/venv/bin:/usr/bin:/usr/local/bin"
+ExecStart=/opt/nous/backend/venv/bin/uvicorn server:app --host 0.0.0.0 --port 8000
 Restart=always
 RestartSec=10
 
@@ -100,9 +108,11 @@ systemctl start mongodb
 
 # Настройка firewall
 echo "🔥 Configuring firewall..."
+apt install -y ufw
 ufw allow 22/tcp
 ufw allow 80/tcp
 ufw allow 443/tcp
+ufw allow 8001/tcp
 ufw --force enable
 
 echo ""
@@ -114,4 +124,4 @@ echo "2. Configure /opt/nous/frontend/.env with your settings"
 echo "3. Deploy the application: ./deploy.sh"
 echo "4. Setup SSL with: certbot --nginx -d yourdomain.com"
 echo ""
-echo "🔗 Your server is ready at: http://147.45.72.115"
+echo "🔗 Your server is ready at: http://147.45.72.115:8001"

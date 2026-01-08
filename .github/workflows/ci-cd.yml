@@ -69,7 +69,7 @@ jobs:
       
       - name: Check backend health
         run: |
-          curl -f http://localhost:8000/api/health || exit 1
+          curl -f http://localhost:8000/api/ || exit 1
       
       - name: Run API tests
         run: |
@@ -97,7 +97,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '18'
+          node-version: '20'
           cache: 'yarn'
           cache-dependency-path: frontend/yarn.lock
       
@@ -216,7 +216,7 @@ jobs:
           VPS_HOST: ${{ secrets.VPS_HOST }}
         run: |
           sleep 10
-          curl -f http://$VPS_HOST/api/health || exit 1
+          curl -f http://$VPS_HOST/api/ || exit 1
           echo "✅ Health check passed!"
       
       - name: Notify deployment
