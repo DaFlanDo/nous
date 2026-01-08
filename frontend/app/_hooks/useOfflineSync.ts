@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { offlineStorage, OfflineNote, SyncQueueItem } from '../utils/offlineStorage';
+import { offlineStorage, OfflineNote, SyncQueueItem } from '../_utils/offlineStorage';
 
 const API_URL = process.env.EXPO_PUBLIC_BACKEND_URL || 'http://localhost:8000';
 
