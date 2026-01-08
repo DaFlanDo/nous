@@ -4,6 +4,14 @@ FROM node:20-alpine AS builder
 
 WORKDIR /app
 
+# Получение build arguments
+ARG EXPO_PUBLIC_BACKEND_URL
+ARG EXPO_PUBLIC_GOOGLE_CLIENT_ID
+
+# Установка переменных окружения для сборки
+ENV EXPO_PUBLIC_BACKEND_URL=$EXPO_PUBLIC_BACKEND_URL
+ENV EXPO_PUBLIC_GOOGLE_CLIENT_ID=$EXPO_PUBLIC_GOOGLE_CLIENT_ID
+
 # Копирование package.json и yarn.lock
 COPY package.json yarn.lock* ./
 
