@@ -74,9 +74,18 @@ export default function NoteEditScreen() {
   const noteId = params.id as string;
   const isNew = params.isNew === 'true';
 
-  // Загрузка заметки или черновика
+  // Загрузка заметки или очистка для новой
   useEffect(() => {
-    if (noteId && !isNew) {
+    if (isNew) {
+      // Новая заметка - очищаем поля
+      setTitle('');
+      setContent('');
+      setContentHeight(100);
+      lastHeight.current = 100;
+      initialContent.current = { title: '', content: '' };
+      setHasUnsavedChanges(false);
+    } else if (noteId) {
+      // Существующая заметка - загружаем
       loadNote(noteId);
     }
   }, [noteId, isNew]);
@@ -168,9 +177,12 @@ export default function NoteEditScreen() {
       );
     } else {
       // Если изменений нет или это пустая новая заметка - просто выходим
-      if (!isNew && !title.trim() && !content.trim()) {
-        offlineStorage.deleteNote(noteId).catch(console.error);
-        updateUnsyncedCount().catch(console.error);
+      const shouldDelete = (isNew || noteId.startsWith('new_')) && !title.trim() && !content.trim();
+      if (shouldDelete || (!isNew && !title.trim() && !content.trim())) {
+        if (typeof window !== 'undefined') {
+          offlineStorage.deleteNote(noteId).catch(console.error);
+          updateUnsyncedCount().catch(console.error);
+        }
       }
       router.back();
     }
@@ -296,14 +308,24 @@ export default function NoteEditScreen() {
         }
       } else {
         // Офлайн - сохраняем локально
+        const isNewNote = isNew || noteId.startsWith('new_') || noteId.startsWith('offline_');
         const offlineNote: OfflineNote = {
-          ...noteData,
+          id: isNewNote ? `offline_${Date.now()}` : noteId,
+          title,
+          content,
           created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
           synced: false,
         };
         
-        await offlineStorage.saveNote(offlineNote);
-        await updateUnsyncedCount();
+        if (typeof window !== 'undefined') {
+          // Если обновляем существующую заметку, удаляем старую временную версию
+          if (isNewNote && noteId) {
+            await offlineStorage.deleteNote(noteId);
+          }
+          await offlineStorage.saveNote(offlineNote);
+          await updateUnsyncedCount();
+        }
         router.back();
       }
     } catch (error) {

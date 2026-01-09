@@ -26,11 +26,12 @@ export function useOfflineSync(token: string | null = null) {
     };
   }, []);
 
-  // Подсчет несинхронизированных заметок
+  // Подсчет несинхронизированных заметок и операций в очереди
   const updateUnsyncedCount = useCallback(async () => {
     try {
       const unsynced = await offlineStorage.getUnsyncedNotes();
-      setUnsyncedCount(unsynced.length);
+      const queue = await offlineStorage.getSyncQueue();
+      setUnsyncedCount(unsynced.length + queue.length);
     } catch (error) {
       console.error('Error counting unsynced notes:', error);
     }
@@ -42,24 +43,36 @@ export function useOfflineSync(token: string | null = null) {
 
   // Синхронизация при восстановлении сети
   useEffect(() => {
-    if (isOnline && unsyncedCount > 0) {
-      syncNotes();
+    if (isOnline && unsyncedCount > 0 && token) {
+      // Небольшая задержка чтобы дать время интерфейсу обновиться
+      const timer = setTimeout(() => {
+        syncNotes();
+      }, 500);
+      return () => clearTimeout(timer);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOnline, unsyncedCount]);
+  }, [isOnline, unsyncedCount, token]);
 
   const syncNotes = useCallback(async () => {
     if (isSyncing || !isOnline) return;
 
     setIsSyncing(true);
     try {
+      // Синхронизируем несинхронизированные заметки
       const unsyncedNotes = await offlineStorage.getUnsyncedNotes();
       
       for (const note of unsyncedNotes) {
         try {
+          // Проверяем, это новая заметка (offline_) или измененная существующая
+          const isNewNote = note.id.startsWith('offline_');
+          const method = isNewNote ? 'POST' : 'PUT';
+          const url = isNewNote 
+            ? `${API_URL}/api/notes` 
+            : `${API_URL}/api/notes/${note.id}`;
+          
           // Отправляем на сервер
-          const response = await fetch(`${API_URL}/api/notes`, {
-            method: 'POST',
+          const response = await fetch(url, {
+            method,
             headers: {
               'Content-Type': 'application/json',
               ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
@@ -73,12 +86,12 @@ export function useOfflineSync(token: string | null = null) {
           if (response.ok) {
             const serverNote = await response.json();
             
-            // Удаляем старую офлайн-заметку
-            if (note.id.startsWith('offline_')) {
+            // Удаляем старую офлайн-заметку если это была новая
+            if (isNewNote) {
               await offlineStorage.deleteNote(note.id);
             }
             
-            // Сохраняем с новым ID с сервера
+            // Сохраняем с новым или обновленным ID с сервера
             await offlineStorage.saveNote({
               ...serverNote,
               synced: true,
@@ -86,6 +99,46 @@ export function useOfflineSync(token: string | null = null) {
           }
         } catch (error) {
           console.error('Error syncing note:', error);
+        }
+      }
+
+      // Обрабатываем очередь синхронизации (удаления и другие операции)
+      const syncQueue = await offlineStorage.getSyncQueue();
+      
+      for (const item of syncQueue) {
+        try {
+          if (item.type === 'delete') {
+            // Удаляем заметку с сервера
+            const response = await fetch(`${API_URL}/api/notes/${item.data.noteId}`, {
+              method: 'DELETE',
+              headers: {
+                ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+              },
+            });
+
+            if (response.ok) {
+              // Удаляем из очереди если успешно
+              await offlineStorage.removeSyncQueueItem(item.id);
+            } else {
+              // Увеличиваем счетчик попыток
+              item.retries += 1;
+              if (item.retries > 5) {
+                // Слишком много попыток - удаляем из очереди
+                await offlineStorage.removeSyncQueueItem(item.id);
+              } else {
+                await offlineStorage.addToSyncQueue(item);
+              }
+            }
+          }
+        } catch (error) {
+          console.error('Error processing sync queue item:', error);
+          // Увеличиваем счетчик попыток при ошибке
+          item.retries += 1;
+          if (item.retries <= 5) {
+            await offlineStorage.addToSyncQueue(item);
+          } else {
+            await offlineStorage.removeSyncQueueItem(item.id);
+          }
         }
       }
 
@@ -99,7 +152,7 @@ export function useOfflineSync(token: string | null = null) {
     } finally {
       setIsSyncing(false);
     }
-  }, [isSyncing, isOnline, updateUnsyncedCount]);
+  }, [isSyncing, isOnline, token, updateUnsyncedCount]);
 
   return {
     isOnline,

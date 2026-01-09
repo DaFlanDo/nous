@@ -50,7 +50,13 @@ export default function NotesScreen() {
         // Только локальные заметки
         if (typeof window !== 'undefined') {
           const localNotes = await offlineStorage.getAllNotes();
-          setNotes(localNotes as any);
+          // Фильтруем пустые и сортируем
+          const validNotes = localNotes.filter((note: any) => 
+            note.title?.trim() || note.content?.trim()
+          ).sort((a: any, b: any) => 
+            new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
+          );
+          setNotes(validNotes as any);
         }
         setLoading(false);
         setRefreshing(false);
@@ -94,10 +100,18 @@ export default function NotesScreen() {
         // Создаём Map для удаления дубликатов
         const notesMap = new Map();
         [...serverNotes, ...unsyncedLocalNotes].forEach((note: any) => {
-          notesMap.set(note.id, note);
+          // Пропускаем пустые заметки
+          if (note.title?.trim() || note.content?.trim()) {
+            notesMap.set(note.id, note);
+          }
         });
         
-        setNotes(Array.from(notesMap.values()));
+        // Сортируем по дате обновления
+        const sortedNotes = Array.from(notesMap.values()).sort((a: any, b: any) => 
+          new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
+        );
+        
+        setNotes(sortedNotes);
       } else {
         // Если сервер недоступен, показываем локальные заметки
         setNotes(localNotes as any);
@@ -163,20 +177,88 @@ export default function NotesScreen() {
 
   const deleteNote = async (noteId: string) => {
     try {
-      await fetch(`${API_URL}/api/notes/${noteId}`, {
-        method: 'DELETE',
-        headers: token ? { 'Authorization': `Bearer ${token}` } : {},
-      });
-      fetchNotes();
+      // Сразу удаляем из UI оптимистично
+      setNotes(prevNotes => prevNotes.filter(note => note.id !== noteId));
+      
+      // Удаляем из локального хранилища
+      if (typeof window !== 'undefined') {
+        await offlineStorage.deleteNote(noteId);
+      }
+      
+      // Если это не офлайн/временная заметка
+      if (!noteId.startsWith('offline_') && !noteId.startsWith('new_')) {
+        if (isOnline && token) {
+          // Онлайн - сразу удаляем с сервера
+          try {
+            const response = await fetch(`${API_URL}/api/notes/${noteId}`, {
+              method: 'DELETE',
+              headers: { 
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json',
+              },
+            });
+            
+            if (!response.ok) {
+              console.error('Server delete failed:', response.status);
+              // Добавляем в очередь на случай если не удалось
+              await offlineStorage.addToSyncQueue({
+                id: `delete_${noteId}_${Date.now()}`,
+                type: 'delete',
+                data: { noteId },
+                timestamp: Date.now(),
+                retries: 0,
+              });
+              await updateUnsyncedCount();
+            }
+          } catch (serverError) {
+            console.error('Server delete error:', serverError);
+            // Добавляем в очередь синхронизации
+            if (typeof window !== 'undefined') {
+              await offlineStorage.addToSyncQueue({
+                id: `delete_${noteId}_${Date.now()}`,
+                type: 'delete',
+                data: { noteId },
+                timestamp: Date.now(),
+                retries: 0,
+              });
+              await updateUnsyncedCount();
+            }
+          }
+        } else {
+          // Офлайн - добавляем в очередь синхронизации
+          console.log('Offline mode: adding delete to sync queue', noteId);
+          if (typeof window !== 'undefined') {
+            await offlineStorage.addToSyncQueue({
+              id: `delete_${noteId}_${Date.now()}`,
+              type: 'delete',
+              data: { noteId },
+              timestamp: Date.now(),
+              retries: 0,
+            });
+            await updateUnsyncedCount();
+          }
+        }
+      }
+      
+      // Обновляем список
+      setTimeout(() => fetchNotes(), 100);
     } catch (error) {
       console.error('Error deleting note:', error);
+      // Восстанавливаем список при ошибке
+      fetchNotes();
     }
   };
 
   const filteredNotes = notes.filter(
-    note =>
-      note.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      note.content.toLowerCase().includes(searchQuery.toLowerCase())
+    note => {
+      // Исключаем пустые временные заметки
+      if (note.id.startsWith('new_') && !note.title && !note.content) {
+        return false;
+      }
+      // Фильтр по поиску
+      return note.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        note.content.toLowerCase().includes(searchQuery.toLowerCase());
+    }
   );
 
   const getGreeting = () => {
