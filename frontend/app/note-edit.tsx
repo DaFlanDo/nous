@@ -19,8 +19,8 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import { format } from 'date-fns';
 import { ru } from 'date-fns/locale';
 import { useAuthContext } from './_layout';
-import { offlineStorage, OfflineNote } from './utils/offlineStorage';
-import { useOfflineSync } from './hooks/useOfflineSync';
+import { offlineStorage, OfflineNote } from './_utils/offlineStorage';
+import { useOfflineSync } from './_hooks/useOfflineSync';
 import { useTheme } from './theme';
 
 const API_URL = process.env.EXPO_PUBLIC_BACKEND_URL || 'http://localhost:8000';

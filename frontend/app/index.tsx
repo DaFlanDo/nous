@@ -18,8 +18,8 @@ import { useRouter, useFocusEffect } from 'expo-router';
 import { format } from 'date-fns';
 import { ru } from 'date-fns/locale';
 import { useAuthContext } from './_layout';
-import { offlineStorage } from './utils/offlineStorage';
-import { useOfflineSync } from './hooks/useOfflineSync';
+import { offlineStorage } from './_utils/offlineStorage';
+import { useOfflineSync } from './_hooks/useOfflineSync';
 import { useTheme } from './theme';
 
 const API_URL = process.env.EXPO_PUBLIC_BACKEND_URL || 'http://localhost:8000';

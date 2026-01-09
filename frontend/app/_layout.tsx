@@ -126,6 +126,36 @@ function AppTabs() {
             href: null,
           }}
         />
+        <Tabs.Screen
+          name="_hooks"
+          options={{
+            href: null,
+          }}
+        />
+        <Tabs.Screen
+          name="_hooks/useOfflineSync"
+          options={{
+            href: null,
+          }}
+        />
+        <Tabs.Screen
+          name="_utils"
+          options={{
+            href: null,
+          }}
+        />
+        <Tabs.Screen
+          name="_utils/offlineStorage"
+          options={{
+            href: null,
+          }}
+        />
+        <Tabs.Screen
+          name="_components"
+          options={{
+            href: null,
+          }}
+        />
       </Tabs>
     </SafeAreaProvider>
   );
