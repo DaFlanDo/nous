@@ -18,9 +18,6 @@ COPY package.json yarn.lock* ./
 # Установка зависимостей
 RUN yarn install --frozen-lockfile
 
-# Копирование .env.production (для встраивания переменных)
-COPY .env.production .env.production
-
 # Копирование исходного кода
 COPY . .
 
