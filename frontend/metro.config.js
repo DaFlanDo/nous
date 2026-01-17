@@ -5,21 +5,32 @@ const { FileStore } = require('metro-cache');
 
 const config = getDefaultConfig(__dirname);
 
-// Use a stable on-disk store (shared across web/android)
+// Стабильный кэш на диске (ускоряет повторные сборки)
 const root = process.env.METRO_CACHE_ROOT || path.join(__dirname, '.metro-cache');
 config.cacheStores = [
   new FileStore({ root: path.join(root, 'cache') }),
 ];
 
+// Исключаем ненужные папки из наблюдения (значительно ускоряет)
+config.resolver.blockList = [
+  /node_modules\/.*\/(android|ios|windows|macos|__tests__|__mocks__|__fixtures__|\.git)/,
+  /\.git\/.*/,
+  /android\/.*/,
+  /ios\/.*/,
+];
 
-// // Exclude unnecessary directories from file watching
-// config.watchFolders = [__dirname];
-// config.resolver.blacklistRE = /(.*)\/(__tests__|android|ios|build|dist|.git|node_modules\/.*\/android|node_modules\/.*\/ios|node_modules\/.*\/windows|node_modules\/.*\/macos)(\/.*)?$/;
+// Оптимизация для web сборки
+config.resolver.sourceExts = ['js', 'jsx', 'json', 'ts', 'tsx', 'cjs', 'mjs'];
+config.resolver.assetExts = config.resolver.assetExts.filter(ext => ext !== 'svg');
 
-// // Alternative: use a more aggressive exclusion pattern
-// config.resolver.blacklistRE = /node_modules\/.*\/(android|ios|windows|macos|__tests__|\.git|.*\.android\.js|.*\.ios\.js)$/;
+// Уменьшаем воркеры (экономия памяти, стабильнее)
+config.maxWorkers = 4;
 
-// Reduce the number of workers to decrease resource usage
-config.maxWorkers = 2;
+// Отключаем лишние проверки в dev
+config.transformer.minifierConfig = {
+  keep_classnames: true,
+  keep_fnames: true,
+  mangle: false,
+};
 
 module.exports = config;
