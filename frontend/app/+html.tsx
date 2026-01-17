@@ -75,11 +75,10 @@ export default function Root({ children }: PropsWithChildren) {
                     .then(function(registration) {
                       console.log('[SW] Registered:', registration.scope);
                       
-                      // Проверяем обновления сразу и каждую минуту
-                      registration.update();
+                      // Проверяем обновления каждые 5 минут (не сразу!)
                       setInterval(function() {
                         registration.update();
-                      }, 60000);
+                      }, 300000);
                       
                       // Обработка обновлений
                       registration.addEventListener('updatefound', function() {
@@ -88,14 +87,15 @@ export default function Root({ children }: PropsWithChildren) {
                         
                         newWorker.addEventListener('statechange', function() {
                           if (newWorker.state === 'installed') {
+                            // Только показываем уведомление если уже был контроллер
+                            // (не первая установка)
                             if (navigator.serviceWorker.controller) {
-                              // Новая версия готова
                               console.log('[SW] New version ready');
-                              
-                              // Показываем уведомление
                               showUpdateNotification(function() {
                                 newWorker.postMessage({ type: 'SKIP_WAITING' });
                               });
+                            } else {
+                              console.log('[SW] First install, no reload needed');
                             }
                           }
                         });
@@ -105,12 +105,13 @@ export default function Root({ children }: PropsWithChildren) {
                       console.error('[SW] Registration failed:', error);
                     });
                   
-                  // Перезагрузка при активации нового SW
+                  // Перезагрузка при активации нового SW (только по клику пользователя)
                   var refreshing = false;
                   navigator.serviceWorker.addEventListener('controllerchange', function() {
-                    if (!refreshing) {
+                    // Проверяем флаг что пользователь кликнул "Обновить"
+                    if (window.__swUserTriggeredUpdate && !refreshing) {
                       refreshing = true;
-                      console.log('[SW] Controller changed, reloading...');
+                      console.log('[SW] Controller changed by user, reloading...');
                       window.location.reload();
                     }
                   });
@@ -124,9 +125,14 @@ export default function Root({ children }: PropsWithChildren) {
                 });
               }
               
+              // Флаг для отслеживания пользовательского обновления
+              window.__swUserTriggeredUpdate = false;
+              
               // Уведомление об обновлении
               function showUpdateNotification(onUpdate) {
-                // Создаём toast уведомление
+                // Не показываем если уже есть
+                if (document.getElementById('sw-update-toast')) return;
+                
                 var toast = document.createElement('div');
                 toast.id = 'sw-update-toast';
                 toast.innerHTML = \`
@@ -169,18 +175,18 @@ export default function Root({ children }: PropsWithChildren) {
                 \`;
                 
                 window.__swUpdate = function() {
+                  window.__swUserTriggeredUpdate = true;
                   onUpdate();
                   toast.remove();
                 };
                 
                 document.body.appendChild(toast);
                 
-                // Автоматически обновляем через 5 секунд если не отказались
+                // Убираем уведомление через 30 секунд (без автообновления!)
                 setTimeout(function() {
-                  if (document.getElementById('sw-update-toast')) {
-                    onUpdate();
-                  }
-                }, 5000);
+                  var el = document.getElementById('sw-update-toast');
+                  if (el) el.remove();
+                }, 30000);
               }
             })();
           `
