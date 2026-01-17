@@ -19,6 +19,8 @@ import { format } from 'date-fns';
 import { ru } from 'date-fns/locale';
 import Markdown from 'react-native-markdown-display';
 import { useAuthContext } from './_layout';
+import { useOffline } from './_offline';
+import { useTheme } from './theme';
 
 const API_URL = process.env.EXPO_PUBLIC_BACKEND_URL || 'http://localhost:8000';
 
@@ -44,6 +46,8 @@ interface ChecklistSuggestion {
 
 export default function ChatScreen() {
   const { token } = useAuthContext();
+  const { colors, isDark } = useTheme();
+  const { isOnline } = useOffline({ token });
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputText, setInputText] = useState('');
   const [inputHeight, setInputHeight] = useState(44);
@@ -459,6 +463,33 @@ export default function ChatScreen() {
       </TouchableOpacity>
     </TouchableOpacity>
   );
+
+  // Офлайн заглушка
+  if (!isOnline) {
+    return (
+      <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
+        <View style={styles.header}>
+          <View>
+            <View style={styles.headerRow}>
+              <Text style={[styles.headerTitle, { color: colors.text }]}>Диалог</Text>
+              <Text style={styles.greekAccent}>νοῦς</Text>
+            </View>
+            <Text style={[styles.headerSubtitle, { color: colors.textSecondary }]}>Nous AI</Text>
+          </View>
+        </View>
+        
+        <View style={styles.offlineContainer}>
+          <View style={[styles.offlineIcon, { backgroundColor: isDark ? 'rgba(139,115,85,0.15)' : '#f5f0e8' }]}>
+            <Ionicons name="cloud-offline-outline" size={48} color={colors.primary} />
+          </View>
+          <Text style={[styles.offlineTitle, { color: colors.text }]}>Нет подключения</Text>
+          <Text style={[styles.offlineText, { color: colors.textSecondary }]}>
+            Диалог с AI доступен только{'\n'}при подключении к интернету
+          </Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -1145,5 +1176,32 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#A89F91',
     textAlign: 'center',
+  },
+  offlineContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 40,
+  },
+  offlineIcon: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    backgroundColor: '#f5f0e8',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 24,
+  },
+  offlineTitle: {
+    fontSize: 20,
+    fontWeight: '600',
+    color: '#5D4E3A',
+    marginBottom: 12,
+  },
+  offlineText: {
+    fontSize: 15,
+    color: '#A89F91',
+    textAlign: 'center',
+    lineHeight: 22,
   },
 });
