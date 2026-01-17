@@ -132,6 +132,48 @@ function AppTabs() {
           }}
         />
         <Tabs.Screen
+          name="_offline/index"
+          options={{
+            href: null,
+          }}
+        />
+        <Tabs.Screen
+          name="_offline/hooks"
+          options={{
+            href: null,
+          }}
+        />
+        <Tabs.Screen
+          name="_offline/types"
+          options={{
+            href: null,
+          }}
+        />
+        <Tabs.Screen
+          name="_offline/database"
+          options={{
+            href: null,
+          }}
+        />
+        <Tabs.Screen
+          name="_offline/syncService"
+          options={{
+            href: null,
+          }}
+        />
+        <Tabs.Screen
+          name="_offline/notesRepository"
+          options={{
+            href: null,
+          }}
+        />
+        <Tabs.Screen
+          name="_offline/checklistsRepository"
+          options={{
+            href: null,
+          }}
+        />
+        <Tabs.Screen
           name="_components"
           options={{
             href: null,
