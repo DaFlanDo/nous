@@ -28,11 +28,11 @@ function AppTabs() {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
   
-  // Минимальная высота tab bar
-  // bottomPadding только для home indicator, не больше
+  // Компактный tab bar
+  // Для PWA не добавляем лишний padding - home indicator уже есть
   const isWeb = Platform.OS === 'web';
-  const bottomPadding = isWeb ? Math.min(insets.bottom, 4) : Math.min(insets.bottom, 20);
-  const tabBarHeight = 50 + bottomPadding;
+  const bottomPadding = isWeb ? 0 : Math.min(insets.bottom, 16);
+  const tabBarHeight = 52 + bottomPadding;
   
   return (
     <SafeAreaProvider>
