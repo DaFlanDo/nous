@@ -19,8 +19,7 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import { format } from 'date-fns';
 import { ru } from 'date-fns/locale';
 import { useAuthContext } from './_layout';
-import { offlineStorage, OfflineNote } from './_utils/offlineStorage';
-import { useOfflineSync } from './_hooks/useOfflineSync';
+import { notesRepository, useOffline } from './_offline';
 import { useTheme } from './theme';
 
 const API_URL = process.env.EXPO_PUBLIC_BACKEND_URL || 'http://localhost:8000';
@@ -60,7 +59,7 @@ export default function NoteEditScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
   const { token } = useAuthContext();
-  const { isOnline, updateUnsyncedCount } = useOfflineSync(token);
+  const { isOnline } = useOffline({ token });
 
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
@@ -77,7 +76,6 @@ export default function NoteEditScreen() {
   // Загрузка заметки или очистка для новой
   useEffect(() => {
     if (isNew) {
-      // Новая заметка - очищаем поля
       setTitle('');
       setContent('');
       setContentHeight(100);
@@ -85,32 +83,9 @@ export default function NoteEditScreen() {
       initialContent.current = { title: '', content: '' };
       setHasUnsavedChanges(false);
     } else if (noteId) {
-      // Существующая заметка - загружаем
       loadNote(noteId);
     }
   }, [noteId, isNew]);
-
-  // Автосохранение в IndexedDB при изменении (только для существующих заметок)
-  useEffect(() => {
-    if (isNew) return; // Не автосохраняем новые заметки
-    
-    const timer = setTimeout(() => {
-      if (title || content) {
-        offlineStorage.saveNote({
-          id: noteId,
-          title,
-          content,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-          synced: false,
-        }).catch(error => {
-          console.error('Error auto-saving:', error);
-        });
-      }
-    }, 1000);
-
-    return () => clearTimeout(timer);
-  }, [title, content, noteId, isNew]);
 
   // Отслеживание несохранённых изменений
   useEffect(() => {
@@ -121,69 +96,17 @@ export default function NoteEditScreen() {
   }, [title, content]);
 
   const handleBack = () => {
-    // Если это новая заметка и есть содержимое - предлагаем сохранить
-    if (isNew && (title.trim() || content.trim())) {
+    if ((isNew || hasUnsavedChanges) && (title.trim() || content.trim())) {
       Alert.alert(
         'Сохранить заметку?',
-        'Хотите сохранить эту заметку?',
+        'Хотите сохранить изменения?',
         [
-          {
-            text: 'Отмена',
-            style: 'cancel',
-          },
-          {
-            text: 'Не сохранять',
-            style: 'destructive',
-            onPress: () => router.back(),
-          },
-          {
-            text: 'Сохранить',
-            onPress: saveNote,
-          },
-        ]
-      );
-    } else if (!isNew && hasUnsavedChanges && (title.trim() || content.trim())) {
-      Alert.alert(
-        'Несохранённые изменения',
-        'У вас есть несохранённые изменения. Сохранить перед выходом?',
-        [
-          {
-            text: 'Отмена',
-            style: 'cancel',
-          },
-          {
-            text: 'Выйти без сохранения',
-            style: 'destructive',
-            onPress: async () => {
-              // Удаляем пустую заметку если ничего не было сохранено
-              if (!initialContent.current.title && !initialContent.current.content) {
-                try {
-                  if (typeof window !== 'undefined') {
-                    await offlineStorage.deleteNote(noteId);
-                    await updateUnsyncedCount();
-                  }
-                } catch (error) {
-                  console.error('Error deleting note:', error);
-                }
-              }
-              router.back();
-            },
-          },
-          {
-            text: 'Сохранить',
-            onPress: saveNote,
-          },
+          { text: 'Отмена', style: 'cancel' },
+          { text: 'Не сохранять', style: 'destructive', onPress: () => router.back() },
+          { text: 'Сохранить', onPress: saveNote },
         ]
       );
     } else {
-      // Если изменений нет или это пустая новая заметка - просто выходим
-      const shouldDelete = (isNew || noteId.startsWith('new_')) && !title.trim() && !content.trim();
-      if (shouldDelete || (!isNew && !title.trim() && !content.trim())) {
-        if (typeof window !== 'undefined') {
-          offlineStorage.deleteNote(noteId).catch(console.error);
-          updateUnsyncedCount().catch(console.error);
-        }
-      }
       router.back();
     }
   };
@@ -191,8 +114,8 @@ export default function NoteEditScreen() {
   const loadNote = async (id: string) => {
     setLoading(true);
     try {
-      // Загружаем из локального хранилища
-      const localNote = await offlineStorage.getNote(id);
+      // Сначала пробуем из локального хранилища
+      const localNote = await notesRepository.getById(id);
       if (localNote) {
         setTitle(localNote.title);
         setContent(localNote.content);
@@ -202,19 +125,20 @@ export default function NoteEditScreen() {
         lastHeight.current = initialHeight;
       }
 
-      // Если онлайн, пробуем обновить с сервера (только для синхронизированных заметок)
-      if (isOnline && token && !id.startsWith('offline_')) {
-        const response = await fetch(`${API_URL}/api/notes/${id}`, {
-          headers: { 'Authorization': `Bearer ${token}` },
-        });
-        if (response.ok) {
-          const note = await response.json();
-          setTitle(note.title);
-          setContent(note.content);
-          initialContent.current = { title: note.title, content: note.content };
-          const initialHeight = Math.max(100, note.content.split('\n').length * 32);
-          setContentHeight(initialHeight);
-          lastHeight.current = initialHeight;
+      // Если онлайн и это не локальная заметка - пробуем обновить с сервера
+      if (isOnline && token && !id.startsWith('local_')) {
+        try {
+          const response = await fetch(`${API_URL}/api/notes/${id}`, {
+            headers: { 'Authorization': `Bearer ${token}` },
+          });
+          if (response.ok) {
+            const note = await response.json();
+            setTitle(note.title);
+            setContent(note.content);
+            initialContent.current = { title: note.title, content: note.content };
+          }
+        } catch (e) {
+          // Сервер недоступен - используем локальные данные
         }
       }
     } catch (error) {
@@ -250,7 +174,6 @@ export default function NoteEditScreen() {
 
   const saveNote = async () => {
     if (!title.trim() && !content.trim()) {
-      // Если заметка пустая, просто выходим без сохранения
       router.back();
       return;
     }
@@ -258,78 +181,18 @@ export default function NoteEditScreen() {
     setSaving(true);
 
     try {
-      if (isOnline && token) {
-        // Онлайн - отправляем на сервер
-        if (isNew || noteId.startsWith('new_') || noteId.startsWith('offline_')) {
-          // Новая заметка - создаём на сервере
-          const response = await fetch(`${API_URL}/api/notes`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${token}`,
-            },
-            body: JSON.stringify({ title, content }),
-          });
-          if (response.ok) {
-            const serverNote = await response.json();
-            // Удаляем старую временную/офлайн версию если была
-            if (typeof window !== 'undefined' && noteId.startsWith('offline_')) {
-              await offlineStorage.deleteNote(noteId);
-            }
-            // Сохраняем серверную версию
-            if (typeof window !== 'undefined') {
-              await offlineStorage.saveNote({
-                ...serverNote,
-                synced: true,
-              });
-            }
-            router.back();
-          }
-        } else {
-          // Существующая заметка - обновляем
-          const response = await fetch(`${API_URL}/api/notes/${noteId}`, {
-            method: 'PUT',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${token}`,
-            },
-            body: JSON.stringify({ title, content }),
-          });
-          if (response.ok) {
-            const updatedNote = await response.json();
-            if (typeof window !== 'undefined') {
-              await offlineStorage.saveNote({
-                ...updatedNote,
-                synced: true,
-              });
-            }
-            router.back();
-          }
-        }
-      } else {
-        // Офлайн - сохраняем локально
-        const isNewNote = isNew || noteId.startsWith('new_');
-        const offlineNote: OfflineNote = {
-          id: isNewNote ? `offline_${Date.now()}` : noteId,
-          title,
-          content,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-          synced: false,
-        };
-        
-        if (typeof window !== 'undefined') {
-          // Если обновляем существующую заметку и создавалась новая временная, удаляем старую
-          if (isNewNote && noteId && (noteId.startsWith('new_') || noteId.startsWith('offline_'))) {
-            await offlineStorage.deleteNote(noteId);
-          }
-          await offlineStorage.saveNote(offlineNote);
-          await updateUnsyncedCount();
-        }
+      // Используем новый репозиторий для сохранения
+      const noteIdToSave = (isNew || noteId.startsWith('new_')) ? null : noteId;
+      const result = await notesRepository.save(noteIdToSave, title, content);
+      
+      if (result.success) {
         router.back();
+      } else {
+        Alert.alert('Ошибка', result.error || 'Не удалось сохранить заметку');
       }
     } catch (error) {
       console.error('Error saving note:', error);
+      Alert.alert('Ошибка', 'Не удалось сохранить заметку');
     } finally {
       setSaving(false);
     }

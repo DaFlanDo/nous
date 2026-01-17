@@ -37,7 +37,6 @@ function AppTabs() {
             styles.tabBar, 
             { 
               backgroundColor: colors.background, 
-              borderTopColor: colors.border,
               paddingBottom: Math.max(insets.bottom, 10),
               height: 64 + Math.max(insets.bottom, 10),
             }
@@ -127,25 +126,7 @@ function AppTabs() {
           }}
         />
         <Tabs.Screen
-          name="_hooks"
-          options={{
-            href: null,
-          }}
-        />
-        <Tabs.Screen
-          name="_hooks/useOfflineSync"
-          options={{
-            href: null,
-          }}
-        />
-        <Tabs.Screen
-          name="_utils"
-          options={{
-            href: null,
-          }}
-        />
-        <Tabs.Screen
-          name="_utils/offlineStorage"
+          name="_offline"
           options={{
             href: null,
           }}
@@ -208,14 +189,15 @@ const styles = StyleSheet.create({
     bottom: 0,
     left: 0,
     right: 0,
-    borderTopWidth: 1,
+    borderTopWidth: 0,
     height: Platform.OS === 'ios' ? 88 : 64,
     paddingBottom: Platform.OS === 'ios' ? 34 : 10,
     paddingTop: 10,
     elevation: 8,
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    shadowOffset: { width: 0, height: -2 },
+    shadowColor: '#000',
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: -4 },
   },
   tabBarBg: {
     flex: 1,

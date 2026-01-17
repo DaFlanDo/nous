@@ -15,6 +15,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { format } from 'date-fns';
 import { ru } from 'date-fns/locale';
 import { useAuthContext } from './_layout';
+import { useChecklists, useOffline, ChecklistTemplate } from './_offline';
 
 const API_URL = process.env.EXPO_PUBLIC_BACKEND_URL || 'http://localhost:8000';
 
@@ -31,156 +32,69 @@ interface DailyChecklist {
   template_id?: string;
 }
 
-interface ChecklistTemplate {
-  id: string;
-  name: string;
-  items: string[];
-}
-
 export default function ChecklistsScreen() {
   const { token } = useAuthContext();
   const [todayDate] = useState(format(new Date(), 'yyyy-MM-dd'));
-  const [dailyChecklist, setDailyChecklist] = useState<DailyChecklist | null>(null);
+  
+  // Используем офлайн хуки
+  const { isOnline } = useOffline({ token });
+  const { 
+    checklist: dailyChecklist, 
+    loading, 
+    addItem: addChecklistItem,
+    toggleItem: toggleChecklistItem,
+    removeItem: removeChecklistItem,
+    applyTemplate: applyChecklistTemplate,
+    refresh: refreshChecklist,
+  } = useChecklists({ token, date: todayDate });
+  
   const [templates, setTemplates] = useState<ChecklistTemplate[]>([]);
-  const [loading, setLoading] = useState(true);
   const [newItemText, setNewItemText] = useState('');
   const [showTemplateModal, setShowTemplateModal] = useState(false);
   const [newTemplateName, setNewTemplateName] = useState('');
   const [newTemplateItems, setNewTemplateItems] = useState<string[]>(['']);
 
-  const fetchData = useCallback(async () => {
+  // Загрузка шаблонов (чеклист загружается через хук)
+  const fetchTemplates = useCallback(async () => {
+    if (!isOnline || !token) return;
+    
     try {
-      const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
-      const [checklistRes, templatesRes] = await Promise.all([
-        fetch(`${API_URL}/api/checklists/${todayDate}`, { headers }),
-        fetch(`${API_URL}/api/templates`, { headers }),
-      ]);
-
-      if (checklistRes.ok) {
-        const data = await checklistRes.json();
-        setDailyChecklist(data);
-      }
-
-      if (templatesRes.ok) {
-        const data = await templatesRes.json();
-        setTemplates(data);
-      }
-    } catch (error) {
-      console.error('Error fetching data:', error);
-    } finally {
-      setLoading(false);
-    }
-  }, [todayDate]);
-
-  useEffect(() => {
-    fetchData();
-  }, [fetchData]);
-
-  const addItem = async () => {
-    if (!newItemText.trim()) return;
-
-    const newItem: ChecklistItem = {
-      id: Date.now().toString(),
-      text: newItemText.trim(),
-      completed: false,
-    };
-
-    const updatedItems = [...(dailyChecklist?.items || []), newItem];
-
-    try {
-      const response = await fetch(`${API_URL}/api/checklists`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
-        },
-        body: JSON.stringify({
-          date: todayDate,
-          items: updatedItems,
-        }),
+      const response = await fetch(`${API_URL}/api/templates`, {
+        headers: { 'Authorization': `Bearer ${token}` },
       });
 
       if (response.ok) {
         const data = await response.json();
-        setDailyChecklist(data);
-        setNewItemText('');
+        setTemplates(data);
       }
     } catch (error) {
-      console.error('Error adding item:', error);
+      console.error('Error fetching templates:', error);
+    }
+  }, [isOnline, token]);
+
+  useEffect(() => {
+    fetchTemplates();
+  }, [fetchTemplates]);
+
+  const addItem = async () => {
+    if (!newItemText.trim()) return;
+    
+    const success = await addChecklistItem(newItemText);
+    if (success) {
+      setNewItemText('');
     }
   };
 
   const toggleItem = async (itemId: string) => {
-    try {
-      await fetch(`${API_URL}/api/checklists/${todayDate}/items/${itemId}`, {
-        method: 'PUT',
-        headers: token ? { 'Authorization': `Bearer ${token}` } : {},
-      });
-
-      if (dailyChecklist) {
-        const updatedItems = dailyChecklist.items.map(item =>
-          item.id === itemId ? { ...item, completed: !item.completed } : item
-        );
-        setDailyChecklist({ ...dailyChecklist, items: updatedItems });
-      }
-    } catch (error) {
-      console.error('Error toggling item:', error);
-    }
+    await toggleChecklistItem(itemId);
   };
 
   const removeItem = async (itemId: string) => {
-    if (!dailyChecklist) return;
-
-    const updatedItems = dailyChecklist.items.filter(item => item.id !== itemId);
-
-    try {
-      await fetch(`${API_URL}/api/checklists`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
-        },
-        body: JSON.stringify({
-          date: todayDate,
-          items: updatedItems,
-        }),
-      });
-      setDailyChecklist({ ...dailyChecklist, items: updatedItems });
-    } catch (error) {
-      console.error('Error removing item:', error);
-    }
+    await removeChecklistItem(itemId);
   };
 
   const applyTemplate = async (template: ChecklistTemplate) => {
-    const newItems: ChecklistItem[] = template.items.map((text, index) => ({
-      id: `${Date.now()}-${index}`,
-      text,
-      completed: false,
-    }));
-
-    const combinedItems = [...(dailyChecklist?.items || []), ...newItems];
-
-    try {
-      const response = await fetch(`${API_URL}/api/checklists`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
-        },
-        body: JSON.stringify({
-          date: todayDate,
-          items: combinedItems,
-          template_id: template.id,
-        }),
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        setDailyChecklist(data);
-      }
-    } catch (error) {
-      console.error('Error applying template:', error);
-    }
+    await applyChecklistTemplate(template);
   };
 
   const saveTemplate = async () => {
@@ -200,7 +114,7 @@ export default function ChecklistsScreen() {
       });
 
       if (response.ok) {
-        fetchData();
+        fetchTemplates();
         setShowTemplateModal(false);
         setNewTemplateName('');
         setNewTemplateItems(['']);

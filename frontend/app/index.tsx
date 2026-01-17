@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useCallback } from 'react';
 import {
   View,
   Text,
@@ -18,149 +18,32 @@ import { useRouter, useFocusEffect } from 'expo-router';
 import { format } from 'date-fns';
 import { ru } from 'date-fns/locale';
 import { useAuthContext } from './_layout';
-import { offlineStorage } from './_utils/offlineStorage';
-import { useOfflineSync } from './_hooks/useOfflineSync';
+import { useOffline, useNotes, Note } from './_offline';
 import { useTheme } from './theme';
 
 const API_URL = process.env.EXPO_PUBLIC_BACKEND_URL || 'http://localhost:8000';
 
-interface Note {
-  id: string;
-  title: string;
-  content: string;
-  created_at: string;
-  updated_at: string;
-}
-
 export default function NotesScreen() {
-  const { colors, isDark, toggleTheme } = useTheme();
-  const [notes, setNotes] = useState<Note[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
+  const { colors, isDark } = useTheme();
   const [searchQuery, setSearchQuery] = useState('');
   
   const { user, token, signOut } = useAuthContext();
-  const { isOnline, isSyncing, unsyncedCount, syncNotes, updateUnsyncedCount } = useOfflineSync(token);
+  const { isOnline, isSyncing, pendingCount, sync } = useOffline({ token });
+  const { notes, loading, refresh, deleteNote } = useNotes({ token });
   const router = useRouter();
-
-  const fetchNotes = useCallback(async () => {
-    try {
-      // Не загружаем с сервера, если нет токена
-      if (!token) {
-        // Только локальные заметки
-        if (typeof window !== 'undefined') {
-          const localNotes = await offlineStorage.getAllNotes();
-          // Фильтруем пустые и сортируем
-          const validNotes = localNotes.filter((note: any) => 
-            note.title?.trim() || note.content?.trim()
-          ).sort((a: any, b: any) => 
-            new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
-          );
-          setNotes(validNotes as any);
-        }
-        setLoading(false);
-        setRefreshing(false);
-        return;
-      }
-
-      // Сначала загружаем локальные заметки
-      const localNotes = typeof window !== 'undefined' 
-        ? await offlineStorage.getAllNotes()
-        : [];
-
-      // Если офлайн, показываем только локальные
-      if (typeof window !== 'undefined' && !navigator.onLine) {
-        setNotes(localNotes as any);
-        return;
-      }
-
-      // Онлайн - пытаемся загрузить с сервера
-      const response = await fetch(`${API_URL}/api/notes`, {
-        headers: token ? { 'Authorization': `Bearer ${token}` } : {},
-        signal: AbortSignal.timeout(5000)
-      });
-      if (response.ok) {
-        const serverNotes = await response.json();
-        
-        // Сохраняем серверные заметки в IndexedDB
-        if (typeof window !== 'undefined') {
-          for (const note of serverNotes) {
-            await offlineStorage.saveNote({
-              ...note,
-              synced: true,
-            });
-          }
-        }
-
-        // Объединяем серверные и несинхронизированные локальные заметки
-        const unsyncedLocalNotes = localNotes.filter((note: any) => 
-          !note.synced && note.id.startsWith('offline_')
-        );
-        
-        // Создаём Map для удаления дубликатов
-        const notesMap = new Map();
-        [...serverNotes, ...unsyncedLocalNotes].forEach((note: any) => {
-          // Пропускаем пустые заметки
-          if (note.title?.trim() || note.content?.trim()) {
-            notesMap.set(note.id, note);
-          }
-        });
-        
-        // Сортируем по дате обновления
-        const sortedNotes = Array.from(notesMap.values()).sort((a: any, b: any) => 
-          new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
-        );
-        
-        setNotes(sortedNotes);
-      } else {
-        // Если сервер недоступен, показываем локальные заметки
-        setNotes(localNotes as any);
-      }
-    } catch (error) {
-      console.error('Error fetching notes:', error);
-      
-      // При ошибке сети - загружаем из IndexedDB
-      if (typeof window !== 'undefined') {
-        const offlineNotes = await offlineStorage.getAllNotes();
-        setNotes(offlineNotes as any);
-      }
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  }, [token]);
-
-  useEffect(() => {
-    // Инициализация офлайн-хранилища и загрузка заметок
-    const initAndFetch = async () => {
-      if (typeof window !== 'undefined') {
-        try {
-          await offlineStorage.init();
-        } catch (error) {
-          console.error('Error initializing offline storage:', error);
-        }
-      }
-      fetchNotes();
-    };
-    
-    initAndFetch();
-  }, [fetchNotes]);
 
   // Обновляем список заметок при возврате на экран
   useFocusEffect(
     useCallback(() => {
-      fetchNotes();
-    }, [fetchNotes])
+      refresh();
+    }, [refresh])
   );
 
   const onRefresh = () => {
-    setRefreshing(true);
-    fetchNotes();
+    refresh();
   };
 
   const openNewNote = () => {
-    // Просто переходим в редактор с новым временным ID
-    // Заметка будет создана только при сохранении с содержимым
     const newNoteId = `new_${Date.now()}`;
     router.push({
       pathname: '/note-edit',
@@ -175,91 +58,20 @@ export default function NotesScreen() {
     });
   };
 
-  const deleteNote = async (noteId: string) => {
-    try {
-      // Сразу удаляем из UI оптимистично
-      setNotes(prevNotes => prevNotes.filter(note => note.id !== noteId));
-      
-      // Удаляем из локального хранилища
-      if (typeof window !== 'undefined') {
-        await offlineStorage.deleteNote(noteId);
-      }
-      
-      // Если это не офлайн/временная заметка
-      if (!noteId.startsWith('offline_') && !noteId.startsWith('new_')) {
-        if (isOnline && token) {
-          // Онлайн - сразу удаляем с сервера
-          try {
-            const response = await fetch(`${API_URL}/api/notes/${noteId}`, {
-              method: 'DELETE',
-              headers: { 
-                'Authorization': `Bearer ${token}`,
-                'Content-Type': 'application/json',
-              },
-            });
-            
-            if (!response.ok) {
-              console.error('Server delete failed:', response.status);
-              // Добавляем в очередь на случай если не удалось
-              await offlineStorage.addToSyncQueue({
-                id: `delete_${noteId}_${Date.now()}`,
-                type: 'delete',
-                data: { noteId },
-                timestamp: Date.now(),
-                retries: 0,
-              });
-              await updateUnsyncedCount();
-            }
-          } catch (serverError) {
-            console.error('Server delete error:', serverError);
-            // Добавляем в очередь синхронизации
-            if (typeof window !== 'undefined') {
-              await offlineStorage.addToSyncQueue({
-                id: `delete_${noteId}_${Date.now()}`,
-                type: 'delete',
-                data: { noteId },
-                timestamp: Date.now(),
-                retries: 0,
-              });
-              await updateUnsyncedCount();
-            }
-          }
-        } else {
-          // Офлайн - добавляем в очередь синхронизации
-          console.log('Offline mode: adding delete to sync queue', noteId);
-          if (typeof window !== 'undefined') {
-            await offlineStorage.addToSyncQueue({
-              id: `delete_${noteId}_${Date.now()}`,
-              type: 'delete',
-              data: { noteId },
-              timestamp: Date.now(),
-              retries: 0,
-            });
-            await updateUnsyncedCount();
-          }
-        }
-      }
-      
-      // Обновляем список
-      setTimeout(() => fetchNotes(), 100);
-    } catch (error) {
-      console.error('Error deleting note:', error);
-      // Восстанавливаем список при ошибке
-      fetchNotes();
+  const handleDeleteNote = async (noteId: string) => {
+    const success = await deleteNote(noteId);
+    if (!success) {
+      Alert.alert('Ошибка', 'Не удалось удалить заметку');
     }
   };
 
-  const filteredNotes = notes.filter(
-    note => {
-      // Исключаем пустые временные заметки
-      if (note.id.startsWith('new_') && !note.title && !note.content) {
-        return false;
-      }
-      // Фильтр по поиску
-      return note.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        note.content.toLowerCase().includes(searchQuery.toLowerCase());
+  const filteredNotes = notes.filter(note => {
+    if (note.id.startsWith('new_') && !note.title && !note.content) {
+      return false;
     }
-  );
+    return note.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      note.content.toLowerCase().includes(searchQuery.toLowerCase());
+  });
 
   const getGreeting = () => {
     const hour = new Date().getHours();
@@ -287,15 +99,29 @@ export default function NotesScreen() {
       activeOpacity={0.7}
     >
       <View style={styles.noteContent}>
-        <Text style={[styles.noteTitle, { color: colors.text }]} numberOfLines={1}>{item.title}</Text>
-        <Text style={[styles.noteText, { color: colors.textSecondary }]} numberOfLines={2}>{item.content}</Text>
+        <View style={styles.noteTitleRow}>
+          <Text style={[styles.noteTitle, { color: colors.text }]} numberOfLines={1}>
+            {item.title}
+          </Text>
+          {item._syncStatus === 'pending' && (
+            <Ionicons name="cloud-upload-outline" size={14} color={colors.textSecondary} />
+          )}
+        </View>
+        <Text style={[styles.noteText, { color: colors.textSecondary }]} numberOfLines={2}>
+          {item.content}
+        </Text>
         <Text style={[styles.noteDate, { color: colors.textSecondary }]}>
-          {format(new Date(item.updated_at), 'd MMMM', { locale: ru })}
+          {(() => {
+            const dateStr = item.updatedAt || item.createdAt;
+            if (!dateStr) return '';
+            const date = new Date(dateStr);
+            return isNaN(date.getTime()) ? '' : format(date, 'd MMMM', { locale: ru });
+          })()}
         </Text>
       </View>
       <TouchableOpacity 
         style={styles.deleteBtn}
-        onPress={() => deleteNote(item.id)} 
+        onPress={() => handleDeleteNote(item.id)} 
         hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
       >
         <Ionicons name="close" size={18} color={colors.textSecondary} />
@@ -354,7 +180,7 @@ export default function NotesScreen() {
         <Text style={[styles.headerSubtitle, { color: colors.textSecondary }]}>пространство для мыслей</Text>
         
         {/* Индикатор офлайн и несинхронизированных заметок */}
-        {(!isOnline || unsyncedCount > 0) && (
+        {(!isOnline || pendingCount > 0) && (
           <View style={styles.statusBar}>
             {!isOnline && (
               <View style={styles.offlineIndicator}>
@@ -362,15 +188,12 @@ export default function NotesScreen() {
                 <Text style={styles.offlineText}>Офлайн</Text>
               </View>
             )}
-            {unsyncedCount > 0 && (
+            {pendingCount > 0 && (
               <TouchableOpacity 
                 style={styles.syncIndicator} 
                 onPress={async () => {
-                  const success = await syncNotes();
-                  if (success) {
-                    // После успешной синхронизации обновляем список заметок
-                    fetchNotes();
-                  }
+                  await sync();
+                  refresh();
                 }}
                 disabled={!isOnline || isSyncing}
               >
@@ -380,7 +203,7 @@ export default function NotesScreen() {
                   color="#8B7355" 
                 />
                 <Text style={styles.syncText}>
-                  {isSyncing ? 'Синхронизация...' : `${unsyncedCount} не синхр.`}
+                  {isSyncing ? 'Синхронизация...' : `${pendingCount} не синхр.`}
                 </Text>
               </TouchableOpacity>
             )}
@@ -407,7 +230,7 @@ export default function NotesScreen() {
         showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl 
-            refreshing={refreshing} 
+            refreshing={loading} 
             onRefresh={onRefresh} 
             tintColor="#8B7355"
             colors={['#8B7355']}
@@ -586,11 +409,17 @@ const styles = StyleSheet.create({
   noteContent: {
     flex: 1,
   },
+  noteTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 6,
+  },
   noteTitle: {
+    flex: 1,
     fontSize: 17,
     fontWeight: '600',
     color: '#5D4E3A',
-    marginBottom: 6,
     letterSpacing: -0.2,
   },
   noteText: {
