@@ -28,8 +28,11 @@ function AppTabs() {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
   
-  // Высота с учётом safe area, но без лишних отступов
-  const tabBarHeight = 50 + insets.bottom;
+  // Минимальная высота tab bar
+  // bottomPadding только для home indicator, не больше
+  const isWeb = Platform.OS === 'web';
+  const bottomPadding = isWeb ? Math.min(insets.bottom, 4) : Math.min(insets.bottom, 20);
+  const tabBarHeight = 50 + bottomPadding;
   
   return (
     <SafeAreaProvider>
@@ -40,13 +43,15 @@ function AppTabs() {
             styles.tabBar, 
             { 
               backgroundColor: colors.background, 
-              paddingBottom: insets.bottom,
+              paddingBottom: bottomPadding,
               height: tabBarHeight,
             }
           ],
           tabBarActiveTintColor: colors.primary,
           tabBarInactiveTintColor: colors.textSecondary,
           tabBarLabelStyle: styles.tabBarLabel,
+          tabBarShowLabel: true,
+          tabBarIconStyle: { marginBottom: -2 },
           tabBarBackground: () => (
             <View style={[styles.tabBarBg, { backgroundColor: colors.background }]} />
           ),
@@ -235,7 +240,7 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     borderTopWidth: 0,
-    paddingTop: 8,
+    paddingTop: 4,
     elevation: 8,
     shadowColor: '#000',
     shadowOpacity: 0.08,
@@ -248,6 +253,7 @@ const styles = StyleSheet.create({
   tabBarLabel: {
     fontSize: 10,
     fontWeight: '500',
-    letterSpacing: 0.3,
+    letterSpacing: 0.2,
+    marginBottom: 2,
   },
 });

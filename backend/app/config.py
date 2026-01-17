@@ -20,6 +20,12 @@ class Settings(BaseSettings):
     openai_api_key: str = ""
     openai_base_url: str = "https://api.openai.com/v1"
     openai_model: str = "gpt-4o"
+    openai_model_cheap: str = "gpt-4o-mini"  # Дешёвая модель для саммари
+    
+    # Chat optimization
+    chat_history_limit: int = 10  # Максимум сообщений в контексте
+    chat_summarize_after: int = 6  # После скольких сообщений делать саммари
+    chat_use_cheap_model_for_summary: bool = True  # Использовать дешёвую модель для саммаризации
     
     # JWT
     jwt_secret: str = "your-super-secret-key-change-in-production"
