@@ -28,6 +28,9 @@ function AppTabs() {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
   
+  // Высота с учётом safe area, но без лишних отступов
+  const tabBarHeight = 50 + insets.bottom;
+  
   return (
     <SafeAreaProvider>
       <Tabs
@@ -37,8 +40,8 @@ function AppTabs() {
             styles.tabBar, 
             { 
               backgroundColor: colors.background, 
-              paddingBottom: Math.max(insets.bottom, 10),
-              height: 64 + Math.max(insets.bottom, 10),
+              paddingBottom: insets.bottom,
+              height: tabBarHeight,
             }
           ],
           tabBarActiveTintColor: colors.primary,
@@ -232,9 +235,7 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     borderTopWidth: 0,
-    height: Platform.OS === 'ios' ? 88 : 64,
-    paddingBottom: Platform.OS === 'ios' ? 34 : 10,
-    paddingTop: 10,
+    paddingTop: 8,
     elevation: 8,
     shadowColor: '#000',
     shadowOpacity: 0.08,
@@ -245,7 +246,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   tabBarLabel: {
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '500',
     letterSpacing: 0.3,
   },

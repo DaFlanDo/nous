@@ -12,7 +12,7 @@ export default function Root({ children }: PropsWithChildren) {
         {/* PWA Meta Tags */}
         <meta name="application-name" content="Nous" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
-        <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+        <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
         <meta name="apple-mobile-web-app-title" content="Nous" />
         <meta name="description" content="Пространство для мыслей — дневник рефлексии с AI" />
         <meta name="mobile-web-app-capable" content="yes" />
@@ -223,11 +223,9 @@ export default function Root({ children }: PropsWithChildren) {
               outline: none !important;
             }
             
-            /* iOS safe area support */
+            /* iOS safe area support - только для сторон, низ обрабатывает tab bar */
             @supports (padding-top: env(safe-area-inset-top)) {
               body {
-                padding-top: env(safe-area-inset-top);
-                padding-bottom: env(safe-area-inset-bottom);
                 padding-left: env(safe-area-inset-left);
                 padding-right: env(safe-area-inset-right);
               }
