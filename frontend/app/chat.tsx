@@ -53,6 +53,7 @@ export default function ChatScreen() {
   const [inputHeight, setInputHeight] = useState(44);
   const [loading, setLoading] = useState(false);
   const [updatingState, setUpdatingState] = useState(false);
+  const [historySummary, setHistorySummary] = useState<string | null>(null);  // Сжатая история
   const flatListRef = useRef<FlatList>(null);
   
   // История сеансов
@@ -109,6 +110,7 @@ export default function ChatScreen() {
         const session = await response.json();
         setCurrentSessionId(session.id);
         setMessages([]);
+        setHistorySummary(null);  // Сбрасываем саммари при новой сессии
         fetchSessions();
         return session.id;
       }
@@ -131,6 +133,7 @@ export default function ChatScreen() {
           ...m,
           timestamp: new Date(m.created_at),
         })));
+        setHistorySummary(session.history_summary || null);  // Загружаем саммари
         setShowSessionsModal(false);
       }
     } catch (error) {
@@ -308,6 +311,7 @@ export default function ChatScreen() {
           message: userMessage.content,
           session_id: sessionId,
           history,
+          history_summary: historySummary,  // Отправляем сжатую историю
           update_state: false,
         }),
       });
@@ -321,6 +325,11 @@ export default function ChatScreen() {
           timestamp: new Date(),
         };
         setMessages(prev => [...prev, assistantMessage]);
+        
+        // Обновляем history_summary если бэкенд вернул новый
+        if (data.history_summary) {
+          setHistorySummary(data.history_summary);
+        }
         
         // Если ИИ предлагает чеклист
         if (data.suggest_checklist) {

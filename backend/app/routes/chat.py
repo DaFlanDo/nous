@@ -25,13 +25,17 @@ router = APIRouter(prefix="/chat", tags=["Chat"])
 
 @router.post("")
 async def chat_with_ai(request: ChatRequest, user: User = Depends(require_auth)):
-    """Отправить сообщение AI"""
+    """Отправить сообщение AI с оптимизацией истории"""
     try:
         ai = get_ai_service()
         enc = get_encryption()
         
-        # Get AI response
-        result = await ai.get_reflection_response(request.message, request.history)
+        # Get AI response with optimized history
+        result = await ai.get_reflection_response(
+            message=request.message,
+            history=request.history,
+            history_summary=request.history_summary
+        )
         
         # Save messages to session if session_id provided
         if request.session_id:
@@ -43,13 +47,20 @@ async def chat_with_ai(request: ChatRequest, user: User = Depends(require_auth))
             encrypted_assistant_msg = assistant_msg.model_dump()
             encrypted_assistant_msg['content'] = enc.encrypt(encrypted_assistant_msg['content'])
             
+            # Сохраняем также history_summary в сессии
+            update_data = {
+                "$push": {"messages": {"$each": [encrypted_user_msg, encrypted_assistant_msg]}},
+                "$set": {"updated_at": datetime.utcnow()}
+            }
+            
+            # Если обновился саммари - сохраним его
+            if result.get("history_summary"):
+                update_data["$set"]["history_summary"] = enc.encrypt(result["history_summary"])
+            
             sessions = get_chat_sessions_collection()
             await sessions.update_one(
                 {"id": request.session_id},
-                {
-                    "$push": {"messages": {"$each": [encrypted_user_msg, encrypted_assistant_msg]}},
-                    "$set": {"updated_at": datetime.utcnow()}
-                }
+                update_data
             )
         
         # Update state if requested

@@ -21,6 +21,7 @@ class ChatSession(BaseModel):
     user_id: str
     title: str = "Новый диалог"
     messages: List[ChatMessage] = []
+    history_summary: Optional[str] = None  # Сжатая история для оптимизации
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
 
@@ -35,6 +36,7 @@ class ChatRequest(BaseModel):
     message: str
     session_id: Optional[str] = None
     history: List[dict] = []
+    history_summary: Optional[str] = None  # Сжатая история предыдущих сообщений
     update_state: bool = False
 
 
