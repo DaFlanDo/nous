@@ -1,0 +1,32 @@
+# Dependencies (устанавливаются в контейнере)
+node_modules
+
+# Build outputs
+dist
+.expo
+.metro-cache
+web-build
+
+# Dev files
+.git
+.gitignore
+*.md
+.env*
+.vscode
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Test files
+__tests__
+__mocks__
+coverage
+*.test.*
+*.spec.*
+
+# Unnecessary for build
+android
+ios
+scripts
+*.log
