@@ -33,7 +33,10 @@ COPY package.json yarn.lock* ./
 COPY app ./app
 COPY assets ./assets
 COPY public ./public
-COPY tsconfig.json app.json metro.config.js expo-env.d.ts ./
+COPY tsconfig.json app.json metro.config.js ./
+
+# Копируем опциональные файлы (если есть)
+COPY expo-env.d.ts* eslint.config.js* ./
 
 # Сборка приложения
 RUN yarn build:web
