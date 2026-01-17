@@ -36,20 +36,153 @@ export default function Root({ children }: PropsWithChildren) {
         
         <ScrollViewStyleReset />
         
-        {/* Service Worker Registration */}
+        {/* Service Worker Registration with Smart Updates */}
         <script dangerouslySetInnerHTML={{
           __html: `
-            if ('serviceWorker' in navigator) {
-              window.addEventListener('load', function() {
-                navigator.serviceWorker.register('/sw.js')
-                  .then(function(registration) {
-                    console.log('SW registered: ', registration);
-                  })
-                  .catch(function(registrationError) {
-                    console.log('SW registration failed: ', registrationError);
+            (function() {
+              // Отключаем SW в dev режиме
+              const isDev = window.location.hostname === 'localhost' || 
+                            window.location.hostname === '127.0.0.1' ||
+                            window.location.port === '8081' ||
+                            window.location.port === '19006';
+              
+              if (isDev) {
+                console.log('[SW] Development mode - Service Worker disabled');
+                // Удаляем SW если был установлен ранее
+                if ('serviceWorker' in navigator) {
+                  navigator.serviceWorker.getRegistrations().then(function(registrations) {
+                    registrations.forEach(function(registration) {
+                      registration.unregister();
+                      console.log('[SW] Unregistered SW for dev mode');
+                    });
                   });
-              });
-            }
+                  // Очищаем кэши
+                  if ('caches' in window) {
+                    caches.keys().then(function(names) {
+                      names.forEach(function(name) {
+                        caches.delete(name);
+                      });
+                    });
+                  }
+                }
+                return;
+              }
+              
+              // Production mode - регистрируем SW
+              if ('serviceWorker' in navigator) {
+                window.addEventListener('load', function() {
+                  navigator.serviceWorker.register('/sw.js')
+                    .then(function(registration) {
+                      console.log('[SW] Registered:', registration.scope);
+                      
+                      // Проверяем обновления сразу и каждую минуту
+                      registration.update();
+                      setInterval(function() {
+                        registration.update();
+                      }, 60000);
+                      
+                      // Обработка обновлений
+                      registration.addEventListener('updatefound', function() {
+                        var newWorker = registration.installing;
+                        console.log('[SW] Update found, installing...');
+                        
+                        newWorker.addEventListener('statechange', function() {
+                          if (newWorker.state === 'installed') {
+                            if (navigator.serviceWorker.controller) {
+                              // Новая версия готова
+                              console.log('[SW] New version ready');
+                              
+                              // Показываем уведомление
+                              showUpdateNotification(function() {
+                                newWorker.postMessage({ type: 'SKIP_WAITING' });
+                              });
+                            }
+                          }
+                        });
+                      });
+                    })
+                    .catch(function(error) {
+                      console.error('[SW] Registration failed:', error);
+                    });
+                  
+                  // Перезагрузка при активации нового SW
+                  var refreshing = false;
+                  navigator.serviceWorker.addEventListener('controllerchange', function() {
+                    if (!refreshing) {
+                      refreshing = true;
+                      console.log('[SW] Controller changed, reloading...');
+                      window.location.reload();
+                    }
+                  });
+                  
+                  // Слушаем сообщения от SW
+                  navigator.serviceWorker.addEventListener('message', function(event) {
+                    if (event.data && event.data.type === 'SW_UPDATED') {
+                      console.log('[SW] Updated to version:', event.data.version);
+                    }
+                  });
+                });
+              }
+              
+              // Уведомление об обновлении
+              function showUpdateNotification(onUpdate) {
+                // Создаём toast уведомление
+                var toast = document.createElement('div');
+                toast.id = 'sw-update-toast';
+                toast.innerHTML = \`
+                  <div style="
+                    position: fixed;
+                    bottom: 80px;
+                    left: 50%;
+                    transform: translateX(-50%);
+                    background: #333;
+                    color: white;
+                    padding: 12px 20px;
+                    border-radius: 8px;
+                    display: flex;
+                    align-items: center;
+                    gap: 12px;
+                    box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+                    z-index: 10000;
+                    font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+                    font-size: 14px;
+                  ">
+                    <span>Доступна новая версия</span>
+                    <button onclick="window.__swUpdate()" style="
+                      background: #4CAF50;
+                      color: white;
+                      border: none;
+                      padding: 6px 12px;
+                      border-radius: 4px;
+                      cursor: pointer;
+                      font-size: 14px;
+                    ">Обновить</button>
+                    <button onclick="this.parentElement.parentElement.remove()" style="
+                      background: transparent;
+                      color: #999;
+                      border: none;
+                      padding: 4px;
+                      cursor: pointer;
+                      font-size: 18px;
+                    ">×</button>
+                  </div>
+                \`;
+                
+                window.__swUpdate = function() {
+                  onUpdate();
+                  toast.remove();
+                };
+                
+                document.body.appendChild(toast);
+                
+                // Автоматически обновляем через 5 секунд если не отказались
+                setTimeout(function() {
+                  if (document.getElementById('sw-update-toast')) {
+                    onUpdate();
+                  }
+                }, 5000);
+              }
+            })();
           `
         }} />
         

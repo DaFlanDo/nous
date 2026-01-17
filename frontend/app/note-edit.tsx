@@ -308,7 +308,7 @@ export default function NoteEditScreen() {
         }
       } else {
         // Офлайн - сохраняем локально
-        const isNewNote = isNew || noteId.startsWith('new_') || noteId.startsWith('offline_');
+        const isNewNote = isNew || noteId.startsWith('new_');
         const offlineNote: OfflineNote = {
           id: isNewNote ? `offline_${Date.now()}` : noteId,
           title,
@@ -319,8 +319,8 @@ export default function NoteEditScreen() {
         };
         
         if (typeof window !== 'undefined') {
-          // Если обновляем существующую заметку, удаляем старую временную версию
-          if (isNewNote && noteId) {
+          // Если обновляем существующую заметку и создавалась новая временная, удаляем старую
+          if (isNewNote && noteId && (noteId.startsWith('new_') || noteId.startsWith('offline_'))) {
             await offlineStorage.deleteNote(noteId);
           }
           await offlineStorage.saveNote(offlineNote);

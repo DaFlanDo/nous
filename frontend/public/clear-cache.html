@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Nous - Сброс кэша</title>
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+      color: #fff;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 0;
+      padding: 20px;
+    }
+    .container {
+      background: rgba(255, 255, 255, 0.1);
+      backdrop-filter: blur(10px);
+      border-radius: 20px;
+      padding: 40px;
+      max-width: 500px;
+      width: 100%;
+      text-align: center;
+    }
+    h1 {
+      margin-bottom: 10px;
+      font-size: 28px;
+    }
+    p {
+      color: #aaa;
+      margin-bottom: 30px;
+      line-height: 1.6;
+    }
+    button {
+      background: #4CAF50;
+      color: white;
+      border: none;
+      padding: 15px 40px;
+      font-size: 18px;
+      border-radius: 10px;
+      cursor: pointer;
+      transition: all 0.3s;
+      margin: 10px;
+    }
+    button:hover {
+      background: #45a049;
+      transform: scale(1.05);
+    }
+    button:disabled {
+      background: #666;
+      cursor: not-allowed;
+      transform: none;
+    }
+    .secondary {
+      background: #2196F3;
+    }
+    .secondary:hover {
+      background: #1976D2;
+    }
+    .danger {
+      background: #f44336;
+    }
+    .danger:hover {
+      background: #d32f2f;
+    }
+    .status {
+      margin-top: 30px;
+      padding: 20px;
+      background: rgba(0, 0, 0, 0.2);
+      border-radius: 10px;
+      text-align: left;
+      font-family: monospace;
+      font-size: 14px;
+      max-height: 300px;
+      overflow-y: auto;
+    }
+    .status .success { color: #4CAF50; }
+    .status .error { color: #f44336; }
+    .status .info { color: #2196F3; }
+    .buttons {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 10px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🧹 Nous Cache Manager</h1>
+    <p>
+      Если приложение работает некорректно или не обновляется, 
+      используйте эти инструменты для сброса кэша.
+    </p>
+    
+    <div class="buttons">
+      <button onclick="clearAllCaches()" class="danger">
+        🗑️ Сбросить весь кэш
+      </button>
+      <button onclick="unregisterSW()" class="secondary">
+        ⏹️ Удалить Service Worker
+      </button>
+      <button onclick="showCacheInfo()">
+        📊 Показать информацию
+      </button>
+    </div>
+    
+    <div class="status" id="status">
+      <div class="info">Готов к работе...</div>
+    </div>
+    
+    <div style="margin-top: 20px;">
+      <button onclick="goToApp()" style="background: #9c27b0;">
+        🏠 Вернуться в приложение
+      </button>
+    </div>
+  </div>
+
+  <script>
+    const statusDiv = document.getElementById('status');
+    
+    function log(message, type = 'info') {
+      const time = new Date().toLocaleTimeString();
+      statusDiv.innerHTML += `<div class="${type}">[${time}] ${message}</div>`;
+      statusDiv.scrollTop = statusDiv.scrollHeight;
+    }
+    
+    async function clearAllCaches() {
+      log('Начинаю очистку кэшей...', 'info');
+      
+      try {
+        // Удаляем все кэши
+        if ('caches' in window) {
+          const cacheNames = await caches.keys();
+          log(`Найдено кэшей: ${cacheNames.length}`, 'info');
+          
+          for (const name of cacheNames) {
+            await caches.delete(name);
+            log(`✓ Удалён кэш: ${name}`, 'success');
+          }
+        }
+        
+        // Очищаем localStorage
+        const localStorageKeys = Object.keys(localStorage);
+        localStorage.clear();
+        log(`✓ Очищен localStorage (${localStorageKeys.length} ключей)`, 'success');
+        
+        // Очищаем sessionStorage
+        const sessionStorageKeys = Object.keys(sessionStorage);
+        sessionStorage.clear();
+        log(`✓ Очищен sessionStorage (${sessionStorageKeys.length} ключей)`, 'success');
+        
+        // Очищаем IndexedDB
+        if ('indexedDB' in window) {
+          const databases = await indexedDB.databases();
+          for (const db of databases) {
+            if (db.name) {
+              indexedDB.deleteDatabase(db.name);
+              log(`✓ Удалена БД IndexedDB: ${db.name}`, 'success');
+            }
+          }
+        }
+        
+        log('🎉 Все кэши успешно очищены!', 'success');
+        log('Перезагрузите страницу для применения изменений.', 'info');
+        
+      } catch (error) {
+        log(`✗ Ошибка: ${error.message}`, 'error');
+      }
+    }
+    
+    async function unregisterSW() {
+      log('Удаляю Service Workers...', 'info');
+      
+      try {
+        if ('serviceWorker' in navigator) {
+          const registrations = await navigator.serviceWorker.getRegistrations();
+          log(`Найдено SW: ${registrations.length}`, 'info');
+          
+          for (const registration of registrations) {
+            const result = await registration.unregister();
+            if (result) {
+              log(`✓ Удалён SW: ${registration.scope}`, 'success');
+            } else {
+              log(`✗ Не удалось удалить SW: ${registration.scope}`, 'error');
+            }
+          }
+          
+          if (registrations.length === 0) {
+            log('Service Workers не найдены', 'info');
+          } else {
+            log('🎉 Все Service Workers удалены!', 'success');
+          }
+        } else {
+          log('Service Workers не поддерживаются в этом браузере', 'error');
+        }
+      } catch (error) {
+        log(`✗ Ошибка: ${error.message}`, 'error');
+      }
+    }
+    
+    async function showCacheInfo() {
+      log('--- Информация о кэшах ---', 'info');
+      
+      try {
+        // Service Workers
+        if ('serviceWorker' in navigator) {
+          const registrations = await navigator.serviceWorker.getRegistrations();
+          log(`Service Workers: ${registrations.length}`, 'info');
+          registrations.forEach(reg => {
+            log(`  • ${reg.scope} (active: ${reg.active ? 'да' : 'нет'})`, 'info');
+          });
+        }
+        
+        // Caches
+        if ('caches' in window) {
+          const cacheNames = await caches.keys();
+          log(`Кэшей: ${cacheNames.length}`, 'info');
+          
+          for (const name of cacheNames) {
+            const cache = await caches.open(name);
+            const keys = await cache.keys();
+            log(`  • ${name}: ${keys.length} файлов`, 'info');
+          }
+        }
+        
+        // Storage
+        log(`localStorage: ${Object.keys(localStorage).length} ключей`, 'info');
+        log(`sessionStorage: ${Object.keys(sessionStorage).length} ключей`, 'info');
+        
+        // IndexedDB
+        if ('indexedDB' in window && indexedDB.databases) {
+          const databases = await indexedDB.databases();
+          log(`IndexedDB: ${databases.length} баз данных`, 'info');
+          databases.forEach(db => {
+            log(`  • ${db.name} (v${db.version})`, 'info');
+          });
+        }
+        
+        log('--- Конец информации ---', 'info');
+        
+      } catch (error) {
+        log(`✗ Ошибка: ${error.message}`, 'error');
+      }
+    }
+    
+    function goToApp() {
+      window.location.href = '/';
+    }
+    
+    // Показываем информацию при загрузке
+    showCacheInfo();
+  </script>
+</body>
+</html>
