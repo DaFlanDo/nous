@@ -54,30 +54,48 @@ EXPO_PUBLIC_GOOGLE_CLIENT_ID=your-google-client-id.apps.googleusercontent.com
 
 ```bash
 # Запустить всё (MongoDB должен быть запущен)
-./start.sh
+./scripts/start.sh
 
 # Или отдельно:
-./start-backend.sh  # Backend на порту 8000
-./start-frontend.sh # Frontend на порту 8081
+./scripts/start-backend.sh  # Backend на порту 8000
+./scripts/start-frontend.sh # Frontend на порту 8081
 ```
 
 ## Структура проекта
 
 ```
 nous/
-├── backend/
-│   ├── server.py      # FastAPI сервер
-│   ├── .env           # Переменные окружения
-│   └── requirements.txt
-├── frontend/
+├── backend/              # Бэкенд на FastAPI (модульная архитектура)
 │   ├── app/
-│   │   ├── _layout.tsx    # Корневой layout с авторизацией
-│   │   ├── auth.tsx       # Экран входа и хуки авторизации
+│   │   ├── main.py      # Точка входа
+│   │   ├── config.py    # Конфигурация
+│   │   ├── database.py  # MongoDB
+│   │   ├── models/      # Pydantic модели
+│   │   ├── routes/      # API endpoints
+│   │   └── services/    # Бизнес-логика
+│   └── .env
+├── frontend/             # Фронтенд на React Native (Expo)
+│   ├── app/
+│   │   ├── _layout.tsx    # Корневой layout
+│   │   ├── auth.tsx       # Авторизация
 │   │   ├── index.tsx      # Записи
 │   │   ├── checklists.tsx # Чеклисты
 │   │   ├── state.tsx      # Состояние
 │   │   └── chat.tsx       # AI-чат
 │   └── .env
+├── tests/                # Тесты
+├── docs/                 # Документация
+│   ├── DEPLOYMENT.md
+│   ├── ENCRYPTION.md
+│   ├── PWA_FEATURES.md
+│   └── VPS_DEPLOY.md
+├── scripts/              # Скрипты запуска и деплоя
+│   ├── start.sh
+│   ├── deploy.sh
+│   └── switch-env.sh
+└── config/               # Конфигурационные файлы
+    ├── docker-compose.yml
+    └── .env.example
 └── README.md
 ```
 

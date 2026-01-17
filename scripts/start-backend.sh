@@ -8,4 +8,4 @@ echo "🔧 Запуск бэкенда..."
 lsof -ti:8000 | xargs kill -9 2>/dev/null
 
 cd backend
-uvicorn server:app --host 0.0.0.0 --port 8000 --reload
+uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload

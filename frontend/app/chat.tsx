@@ -46,6 +46,7 @@ export default function ChatScreen() {
   const { token } = useAuthContext();
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputText, setInputText] = useState('');
+  const [inputHeight, setInputHeight] = useState(44);
   const [loading, setLoading] = useState(false);
   const [updatingState, setUpdatingState] = useState(false);
   const flatListRef = useRef<FlatList>(null);
@@ -460,7 +461,7 @@ export default function ChatScreen() {
   );
 
   return (
-    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
+    <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}>
         <View>
           <View style={styles.headerRow}>
@@ -634,14 +635,27 @@ export default function ChatScreen() {
             </View>
             <Text style={styles.typingText}>Думаю...</Text>
           </View>
-        )}<View style={styles.inputContainer}>
+        )}
+      </KeyboardAvoidingView>
+
+      {/* Поле ввода - закреплено над Tab Bar */}
+      <View style={styles.inputWrapper}>
+        <View style={styles.inputContainer}>
           <TextInput
-            style={styles.input}
+            style={[
+              styles.input,
+              { height: Math.min(Math.max(inputHeight, 44), 150) }
+            ]}
             placeholder="О чём хотите поговорить?"
             placeholderTextColor="#A89F91"
             value={inputText}
             onChangeText={setInputText}
+            onContentSizeChange={(e) => {
+              const height = e.nativeEvent.contentSize.height;
+              setInputHeight(height);
+            }}
             multiline
+            textAlignVertical="center"
             maxLength={2000}
           />
           <TouchableOpacity
@@ -653,7 +667,7 @@ export default function ChatScreen() {
             <Ionicons name="arrow-up" size={20} color="#FFFFFF" />
           </TouchableOpacity>
         </View>
-      </KeyboardAvoidingView>
+      </View>
 
       {/* Модальное окно истории сеансов */}
       <Modal visible={showSessionsModal} animationType="slide" transparent={false}>
@@ -761,6 +775,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 40,
+    paddingBottom: 100,
   },
   aiIcon: {
     width: 88,
@@ -821,7 +836,7 @@ const styles = StyleSheet.create({
   messagesList: {
     paddingHorizontal: 20,
     paddingVertical: 20,
-    paddingBottom: Platform.OS === 'ios' ? 140 : 120,
+    paddingBottom: Platform.OS === 'web' ? 160 : Platform.OS === 'ios' ? 180 : 150,
   },
   messageContainer: {
     marginBottom: 16,
@@ -995,31 +1010,34 @@ const styles = StyleSheet.create({
     color: '#A89F91',
     fontSize: 13,
   },
+  inputWrapper: {
+    position: 'absolute',
+    bottom: Platform.OS === 'web' ? 95 : Platform.OS === 'ios' ? 110 : 90,
+    left: 16,
+    right: 16,
+  },
   inputContainer: {
     flexDirection: 'row',
     alignItems: 'flex-end',
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    borderTopWidth: 1,
-    borderTopColor: '#E8E2D9',
-    backgroundColor: '#FAF8F5',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 28,
+    paddingHorizontal: 6,
+    paddingVertical: 6,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
+    elevation: 8,
   },
   input: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 24,
-    paddingHorizontal: 20,
-    paddingVertical: 14,
-    paddingRight: 48,
+    backgroundColor: 'transparent',
+    borderRadius: 22,
+    paddingHorizontal: 18,
+    paddingVertical: 12,
     color: '#5D4E3A',
-    fontSize: 15,
-    maxHeight: 120,
-    marginRight: 12,
-    shadowColor: '#8B7355',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.04,
-    shadowRadius: 8,
-    elevation: 1,
+    fontSize: 16,
+    lineHeight: 22,
     outlineStyle: 'none' as const,
   } as any,
   sendButton: {

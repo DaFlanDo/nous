@@ -1,50 +1,134 @@
-# Welcome to your Expo app 👋
+# Nous Frontend
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+PWA приложение на **Expo/React Native** для дневника рефлексии с AI-ассистентом.
 
-## Get started
+## 📁 Структура проекта
 
-1. Install dependencies
-
-   ```bash
-   npm install
-   ```
-
-2. Start the app
-
-   ```bash
-   npx expo start
-   ```
-
-In the output, you'll find options to open the app in a
-
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
-
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
-
-## Get a fresh project
-
-When you're ready, run:
-
-```bash
-npm run reset-project
+```
+frontend/
+├── app/                    # Страницы приложения (file-based routing)
+│   ├── _layout.tsx         # Корневой layout с навигацией
+│   ├── +html.tsx           # HTML шаблон для web
+│   ├── index.tsx           # Главная страница
+│   ├── auth.tsx            # Авторизация
+│   ├── chat.tsx            # AI чат
+│   ├── checklists.tsx      # Чеклисты
+│   ├── note-edit.tsx       # Редактор заметок
+│   ├── profile.tsx         # Профиль пользователя
+│   ├── state.tsx           # Состояние/настроение
+│   ├── theme.tsx           # Настройки темы
+│   ├── _components/        # Переиспользуемые компоненты
+│   ├── _hooks/             # Кастомные хуки
+│   │   └── useOfflineSync.ts
+│   └── _utils/             # Утилиты
+│       └── offlineStorage.ts
+│
+├── assets/                 # Статические ресурсы
+│   ├── fonts/
+│   └── images/
+│
+├── config/                 # Конфигурация
+│   ├── .env                # Переменные окружения (активный)
+│   ├── .env.example        # Пример переменных
+│   ├── .env.local          # Локальные переменные
+│   ├── .env.production     # Production переменные
+│   ├── app.json            # Конфиг Expo
+│   ├── tsconfig.json       # TypeScript конфиг
+│   ├── eslint.config.js    # ESLint конфиг
+│   ├── metro.config.js     # Metro bundler конфиг
+│   └── expo-env.d.ts       # TypeScript типы для Expo
+│
+├── docker/                 # Docker конфигурация
+│   ├── Dockerfile          # Docker образ
+│   ├── nginx.conf          # Nginx конфиг для production
+│   └── .dockerignore       # Игнорируемые файлы
+│
+├── public/                 # Публичные файлы (PWA)
+│   ├── sw.js               # Service Worker
+│   ├── manifest.json       # PWA манифест
+│   ├── clear-cache.html    # Утилита сброса кэша
+│   └── icons/              # Иконки приложения
+│
+├── scripts/                # Скрипты
+│   └── reset-project.js    # Сброс проекта
+│
+├── package.json            # Зависимости
+├── yarn.lock               # Lock-файл
+└── README.md               # Этот файл
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+## 🚀 Запуск
 
-## Learn more
+### Разработка
 
-To learn more about developing your project with Expo, look at the following resources:
+```bash
+# Установка зависимостей
+yarn install
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+# Запуск web версии
+yarn web
 
-## Join the community
+# Запуск для iOS
+yarn ios
 
-Join our community of developers creating universal apps.
+# Запуск для Android
+yarn android
+```
 
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+### Production (Docker)
+
+```bash
+cd docker
+docker build -t nous-frontend .
+docker run -p 80:80 nous-frontend
+```
+
+## ⚙️ Конфигурация
+
+Переменные окружения находятся в `config/`:
+
+| Файл | Описание |
+|------|----------|
+| `.env` | Активные переменные (симлинк) |
+| `.env.local` | Для локальной разработки |
+| `.env.production` | Для production |
+
+**Основные переменные:**
+
+```env
+EXPO_PUBLIC_API_URL=http://localhost:8000  # URL бэкенда
+```
+
+## 🔧 PWA функции
+
+- **Service Worker** — кэширование для офлайн работы
+- **Manifest** — установка как приложение
+- **Push Notifications** — уведомления (в разработке)
+
+### Сброс кэша
+
+Если приложение работает некорректно:
+1. Откройте `/clear-cache.html`
+2. Нажмите "Сбросить весь кэш"
+
+Или в DevTools: `Application → Service Workers → Unregister`
+
+## 📱 Страницы
+
+| Путь | Описание |
+|------|----------|
+| `/` | Главная — список записей |
+| `/auth` | Авторизация |
+| `/chat` | AI-ассистент |
+| `/note-edit` | Редактор заметки |
+| `/checklists` | Чеклисты |
+| `/profile` | Профиль и настройки |
+| `/state` | Отслеживание состояния |
+| `/theme` | Настройки темы |
+
+## 🛠 Технологии
+
+- **Expo** — React Native framework
+- **Expo Router** — File-based routing
+- **TypeScript** — Типизация
+- **AsyncStorage** — Локальное хранилище
