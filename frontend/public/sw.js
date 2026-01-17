@@ -9,7 +9,7 @@
  */
 
 // Версия SW — ОБЯЗАТЕЛЬНО менять при каждом деплое!
-const SW_VERSION = '2.2.0';
+const SW_VERSION = '2.3.0';
 const CACHE_PREFIX = 'nous-';
 const CACHE_NAME = `${CACHE_PREFIX}${SW_VERSION}`;
 
@@ -132,12 +132,16 @@ self.addEventListener('install', (event) => {
           console.warn('[SW] Pre-cache failed:', err);
         });
       })
-      .then(() => {
-        // Сразу активируем новый SW без ожидания
-        console.log(`[SW ${SW_VERSION}] Skip waiting`);
-        return self.skipWaiting();
-      })
+      // НЕ вызываем skipWaiting() автоматически - ждём команды от пользователя
   );
+});
+
+// Слушаем сообщение SKIP_WAITING от страницы
+self.addEventListener('message', (event) => {
+  if (event.data && event.data.type === 'SKIP_WAITING') {
+    console.log(`[SW ${SW_VERSION}] Skip waiting by user request`);
+    self.skipWaiting();
+  }
 });
 
 // ============ ACTIVATE ============
