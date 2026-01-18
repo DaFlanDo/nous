@@ -197,19 +197,21 @@ export default function RootLayout() {
 
   if (auth.isLoading) {
     return (
-      <SafeAreaProvider>
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#8B7355" />
-        </View>
-      </SafeAreaProvider>
+      <ThemeProvider>
+        <SafeAreaProvider>
+          <LoadingScreen />
+        </SafeAreaProvider>
+      </ThemeProvider>
     );
   }
 
   if (!auth.isAuthenticated) {
     return (
-      <SafeAreaProvider>
-        <LoginScreen onLogin={auth.reload} />
-      </SafeAreaProvider>
+      <ThemeProvider>
+        <SafeAreaProvider>
+          <LoginScreen onLogin={auth.reload} />
+        </SafeAreaProvider>
+      </ThemeProvider>
     );
   }
 
@@ -224,6 +226,15 @@ export default function RootLayout() {
         <AppTabs />
       </AuthContext.Provider>
     </ThemeProvider>
+  );
+}
+
+function LoadingScreen() {
+  const { colors } = useTheme();
+  return (
+    <View style={[styles.loadingContainer, { backgroundColor: colors.background }]}>
+      <ActivityIndicator size="large" color={colors.primary} />
+    </View>
   );
 }
 

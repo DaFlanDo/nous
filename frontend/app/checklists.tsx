@@ -16,6 +16,7 @@ import { format } from 'date-fns';
 import { ru } from 'date-fns/locale';
 import { useAuthContext } from './_layout';
 import { useChecklists, useOffline, ChecklistTemplate } from './_offline';
+import { useTheme } from './theme';
 
 const API_URL = process.env.EXPO_PUBLIC_BACKEND_URL || 'http://localhost:8000';
 
@@ -34,6 +35,7 @@ interface DailyChecklist {
 
 export default function ChecklistsScreen() {
   const { token } = useAuthContext();
+  const { colors, isDark } = useTheme();
   const [todayDate] = useState(format(new Date(), 'yyyy-MM-dd'));
   
   // Используем офлайн хуки
@@ -142,32 +144,32 @@ export default function ChecklistsScreen() {
 
   if (loading) {
     return (
-      <SafeAreaView style={styles.container}>
+      <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#8B7355" />
+          <ActivityIndicator size="large" color={colors.primary} />
         </View>
       </SafeAreaView>
     );
   }
 
   return (
-    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
+    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         <View style={styles.header}>
-          <Text style={styles.headerTitle}>Чеклисты</Text>
-          <Text style={styles.headerDate}>
+          <Text style={[styles.headerTitle, { color: colors.text }]}>Чеклисты</Text>
+          <Text style={[styles.headerDate, { color: colors.textSecondary }]}>
             {format(new Date(), 'EEEE, d MMMM', { locale: ru })}
           </Text>
         </View>
 
         {/* Progress */}
         {totalCount > 0 && (
-          <View style={styles.progressCard}>
+          <View style={[styles.progressCard, { backgroundColor: colors.cardBackground }]}>
             <View style={styles.progressHeader}>
-              <Text style={styles.progressLabel}>Прогресс дня</Text>
-              <Text style={styles.progressValue}>{completedCount}/{totalCount}</Text>
+              <Text style={[styles.progressLabel, { color: colors.primary }]}>Прогресс дня</Text>
+              <Text style={[styles.progressValue, { color: colors.text }]}>{completedCount}/{totalCount}</Text>
             </View>
-            <View style={styles.progressBar}>
+            <View style={[styles.progressBar, { backgroundColor: isDark ? colors.surface : '#F0EBE3' }]}>
               <View style={[styles.progressFill, { width: `${progressPercentage}%` }]} />
             </View>
             {progressPercentage === 100 && (
@@ -178,19 +180,27 @@ export default function ChecklistsScreen() {
 
         {/* Today's checklist */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Сегодня</Text>
+          <Text style={[styles.sectionTitle, { color: colors.text }]}>Сегодня</Text>
 
           {dailyChecklist?.items.map(item => (
             <TouchableOpacity
               key={item.id}
-              style={styles.checkItem}
+              style={[styles.checkItem, { backgroundColor: colors.cardBackground }]}
               onPress={() => toggleItem(item.id)}
               activeOpacity={0.7}
             >
-              <View style={[styles.checkbox, item.completed && styles.checkboxChecked]}>
+              <View style={[
+                styles.checkbox, 
+                { borderColor: isDark ? colors.border : '#D4CCC0' },
+                item.completed && styles.checkboxChecked
+              ]}>
                 {item.completed && <Ionicons name="checkmark" size={14} color="#FFFFFF" />}
               </View>
-              <Text style={[styles.checkItemText, item.completed && styles.checkItemTextCompleted]}>
+              <Text style={[
+                styles.checkItemText, 
+                { color: colors.text },
+                item.completed && [styles.checkItemTextCompleted, { color: colors.textSecondary }]
+              ]}>
                 {item.text}
               </Text>
               <TouchableOpacity 
@@ -198,7 +208,7 @@ export default function ChecklistsScreen() {
                 hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                 style={styles.removeBtn}
               >
-                <Ionicons name="close" size={16} color="#C4B8A8" />
+                <Ionicons name="close" size={16} color={colors.textSecondary} />
               </TouchableOpacity>
             </TouchableOpacity>
           ))}
@@ -206,15 +216,18 @@ export default function ChecklistsScreen() {
           {/* Add new item */}
           <View style={styles.addItemContainer}>
             <TextInput
-              style={styles.addItemInput}
+              style={[styles.addItemInput, { 
+                backgroundColor: isDark ? colors.surface : '#F0EBE3',
+                color: colors.text,
+              }]}
               placeholder="Добавить намерение..."
-              placeholderTextColor="#A89F91"
+              placeholderTextColor={colors.textSecondary}
               value={newItemText}
               onChangeText={setNewItemText}
               onSubmitEditing={addItem}
               returnKeyType="done"
             />
-            <TouchableOpacity style={styles.addItemButton} onPress={addItem} activeOpacity={0.7}>
+            <TouchableOpacity style={[styles.addItemButton, { backgroundColor: colors.primary }]} onPress={addItem} activeOpacity={0.7}>
               <Ionicons name="add" size={22} color="#FFFFFF" />
             </TouchableOpacity>
           </View>
@@ -223,48 +236,48 @@ export default function ChecklistsScreen() {
         {/* Templates */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Шаблоны</Text>
+            <Text style={[styles.sectionTitle, { color: colors.text }]}>Шаблоны</Text>
             <TouchableOpacity
               style={styles.newTemplateBtn}
               onPress={() => setShowTemplateModal(true)}
             >
-              <Ionicons name="add" size={18} color="#8B7355" />
-              <Text style={styles.newTemplateText}>Создать</Text>
+              <Ionicons name="add" size={18} color={colors.primary} />
+              <Text style={[styles.newTemplateText, { color: colors.primary }]}>Создать</Text>
             </TouchableOpacity>
           </View>
 
           {templates.length === 0 ? (
             <View style={styles.emptyTemplates}>
-              <View style={styles.emptyIcon}>
-                <Ionicons name="copy-outline" size={32} color="#C4B8A8" />
+              <View style={[styles.emptyIcon, { backgroundColor: isDark ? colors.surface : '#F0EBE3' }]}>
+                <Ionicons name="copy-outline" size={32} color={colors.textSecondary} />
               </View>
-              <Text style={styles.emptyTemplatesText}>Нет сохранённых шаблонов</Text>
-              <Text style={styles.emptyTemplatesSubtext}>
+              <Text style={[styles.emptyTemplatesText, { color: colors.textSecondary }]}>Нет сохранённых шаблонов</Text>
+              <Text style={[styles.emptyTemplatesSubtext, { color: colors.textSecondary }]}>
                 Создайте шаблон для повторяющихся задач
               </Text>
             </View>
           ) : (
             templates.map(template => (
-              <View key={template.id} style={styles.templateCard}>
+              <View key={template.id} style={[styles.templateCard, { backgroundColor: colors.cardBackground }]}>
                 <View style={styles.templateInfo}>
-                  <Text style={styles.templateName}>{template.name}</Text>
-                  <Text style={styles.templateItemCount}>
+                  <Text style={[styles.templateName, { color: colors.text }]}>{template.name}</Text>
+                  <Text style={[styles.templateItemCount, { color: colors.textSecondary }]}>
                     {template.items.length} {template.items.length === 1 ? 'задача' : 'задач'}
                   </Text>
                 </View>
                 <View style={styles.templateActions}>
                   <TouchableOpacity
-                    style={styles.applyBtn}
+                    style={[styles.applyBtn, { backgroundColor: isDark ? colors.surface : '#F0EBE3' }]}
                     onPress={() => applyTemplate(template)}
                     activeOpacity={0.7}
                   >
-                    <Text style={styles.applyBtnText}>Добавить</Text>
+                    <Text style={[styles.applyBtnText, { color: colors.primary }]}>Добавить</Text>
                   </TouchableOpacity>
                   <TouchableOpacity 
                     onPress={() => deleteTemplate(template.id)}
                     style={styles.deleteTemplateBtn}
                   >
-                    <Ionicons name="close" size={16} color="#C4B8A8" />
+                    <Ionicons name="close" size={16} color={colors.textSecondary} />
                   </TouchableOpacity>
                 </View>
               </View>
@@ -275,34 +288,42 @@ export default function ChecklistsScreen() {
 
       {/* Create Template Modal */}
       <Modal visible={showTemplateModal} animationType="slide" transparent={false}>
-        <SafeAreaView style={styles.modalContainer}>
-          <View style={styles.modalHeader}>
+        <SafeAreaView style={[styles.modalContainer, { backgroundColor: colors.background }]}>
+          <View style={[styles.modalHeader, { borderBottomColor: colors.border }]}>
             <TouchableOpacity onPress={() => setShowTemplateModal(false)}>
-              <Text style={styles.modalCancelText}>Отмена</Text>
+              <Text style={[styles.modalCancelText, { color: colors.textSecondary }]}>Отмена</Text>
             </TouchableOpacity>
-            <Text style={styles.modalTitle}>Новый шаблон</Text>
+            <Text style={[styles.modalTitle, { color: colors.text }]}>Новый шаблон</Text>
             <TouchableOpacity onPress={saveTemplate}>
-              <Text style={styles.modalSaveText}>Сохранить</Text>
+              <Text style={[styles.modalSaveText, { color: colors.primary }]}>Сохранить</Text>
             </TouchableOpacity>
           </View>
 
           <ScrollView style={styles.modalContent}>
             <TextInput
-              style={styles.templateNameInput}
+              style={[styles.templateNameInput, { 
+                backgroundColor: colors.cardBackground,
+                color: colors.text,
+                borderColor: colors.border,
+              }]}
               placeholder="Название шаблона"
-              placeholderTextColor="#A89F91"
+              placeholderTextColor={colors.textSecondary}
               value={newTemplateName}
               onChangeText={setNewTemplateName}
             />
 
-            <Text style={styles.itemsLabel}>Задачи:</Text>
+            <Text style={[styles.itemsLabel, { color: colors.text }]}>Задачи:</Text>
 
             {newTemplateItems.map((item, index) => (
               <View key={index} style={styles.templateItemRow}>
                 <TextInput
-                  style={styles.templateItemInput}
+                  style={[styles.templateItemInput, { 
+                    backgroundColor: colors.cardBackground,
+                    color: colors.text,
+                    borderColor: colors.border,
+                  }]}
                   placeholder={`Задача ${index + 1}`}
-                  placeholderTextColor="#A89F91"
+                  placeholderTextColor={colors.textSecondary}
                   value={item}
                   onChangeText={text => {
                     const updated = [...newTemplateItems];
@@ -317,7 +338,7 @@ export default function ChecklistsScreen() {
                     }}
                     style={styles.removeItemBtn}
                   >
-                    <Ionicons name="close-circle" size={22} color="#C4B8A8" />
+                    <Ionicons name="close-circle" size={22} color={colors.textSecondary} />
                   </TouchableOpacity>
                 )}
               </View>
@@ -327,8 +348,8 @@ export default function ChecklistsScreen() {
               style={styles.addMoreBtn}
               onPress={() => setNewTemplateItems([...newTemplateItems, ''])}
             >
-              <Ionicons name="add-circle-outline" size={22} color="#8B7355" />
-              <Text style={styles.addMoreText}>Добавить задачу</Text>
+              <Ionicons name="add-circle-outline" size={22} color={colors.primary} />
+              <Text style={[styles.addMoreText, { color: colors.primary }]}>Добавить задачу</Text>
             </TouchableOpacity>
           </ScrollView>
         </SafeAreaView>

@@ -7,7 +7,14 @@ import { database, STORE_NAMES } from './database';
 import { syncService } from './syncService';
 import { Note, SyncStatus, OperationResult } from './types';
 
+const API_URL = process.env.EXPO_PUBLIC_BACKEND_URL || 'http://localhost:8000';
+
 class NotesRepository {
+  private token: string | null = null;
+
+  setToken(token: string | null) {
+    this.token = token;
+  }
   /**
    * Получить все заметки
    */
@@ -39,12 +46,45 @@ class NotesRepository {
   }
 
   /**
-   * Создать заметку
+   * Создать заметку - сначала пытаемся на сервер, потом локально
    */
   async create(title: string, content: string): Promise<OperationResult<Note>> {
     const now = new Date().toISOString();
     const localId = `local_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
+    // Если онлайн - сразу сохраняем на сервер
+    if (typeof navigator !== 'undefined' && navigator.onLine && this.token) {
+      try {
+        const response = await fetch(`${API_URL}/api/notes`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${this.token}`,
+          },
+          body: JSON.stringify({ title, content }),
+        });
+
+        if (response.ok) {
+          const serverNote = await response.json();
+          // Сохраняем с серверным ID
+          const note: Note = {
+            id: serverNote.id,
+            title: serverNote.title,
+            content: serverNote.content,
+            createdAt: serverNote.created_at || now,
+            updatedAt: serverNote.updated_at || now,
+            _syncStatus: 'synced',
+            _lastModified: Date.now(),
+          };
+          await database.put(STORE_NAMES.NOTES, note);
+          return { success: true, data: note };
+        }
+      } catch (error) {
+        console.log('[NotesRepository] Server save failed, falling back to local:', error);
+      }
+    }
+
+    // Офлайн или сервер недоступен - сохраняем локально
     const note: Note = {
       id: localId,
       _localId: localId,
@@ -69,7 +109,7 @@ class NotesRepository {
   }
 
   /**
-   * Обновить заметку
+   * Обновить заметку - сначала на сервер, потом локально
    */
   async update(id: string, updates: { title?: string; content?: string }): Promise<OperationResult<Note>> {
     try {
@@ -80,6 +120,39 @@ class NotesRepository {
       }
 
       const now = new Date().toISOString();
+
+      // Если онлайн и заметка уже на сервере - сразу обновляем там
+      if (typeof navigator !== 'undefined' && navigator.onLine && this.token && !id.startsWith('local_')) {
+        try {
+          const response = await fetch(`${API_URL}/api/notes/${id}`, {
+            method: 'PUT',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${this.token}`,
+            },
+            body: JSON.stringify(updates),
+          });
+
+          if (response.ok) {
+            const serverNote = await response.json();
+            const updatedNote: Note = {
+              id: serverNote.id,
+              title: serverNote.title,
+              content: serverNote.content,
+              createdAt: serverNote.created_at || existing.createdAt,
+              updatedAt: serverNote.updated_at || now,
+              _syncStatus: 'synced',
+              _lastModified: Date.now(),
+            };
+            await database.put(STORE_NAMES.NOTES, updatedNote);
+            return { success: true, data: updatedNote };
+          }
+        } catch (error) {
+          console.log('[NotesRepository] Server update failed, falling back to local:', error);
+        }
+      }
+
+      // Офлайн или сервер недоступен - сохраняем локально
       const updatedNote: Note = {
         ...existing,
         ...updates,

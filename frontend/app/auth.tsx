@@ -16,6 +16,7 @@ import * as WebBrowser from 'expo-web-browser';
 import * as Google from 'expo-auth-session/providers/google';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
+import { useTheme } from './theme';
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -41,32 +42,75 @@ interface AuthState {
 }
 
 // Функции для работы с авторизацией
+// iOS PWA может очищать AsyncStorage, поэтому дублируем в localStorage
 export const authStorage = {
   async getToken(): Promise<string | null> {
     try {
-      return await AsyncStorage.getItem(AUTH_TOKEN_KEY);
+      // Сначала пробуем AsyncStorage
+      let token = await AsyncStorage.getItem(AUTH_TOKEN_KEY);
+      
+      // Fallback на localStorage для iOS PWA
+      if (!token && Platform.OS === 'web' && typeof localStorage !== 'undefined') {
+        token = localStorage.getItem(AUTH_TOKEN_KEY);
+        // Если нашли в localStorage, восстанавливаем в AsyncStorage
+        if (token) {
+          await AsyncStorage.setItem(AUTH_TOKEN_KEY, token);
+        }
+      }
+      
+      return token;
     } catch {
+      // Последняя попытка - только localStorage
+      if (Platform.OS === 'web' && typeof localStorage !== 'undefined') {
+        return localStorage.getItem(AUTH_TOKEN_KEY);
+      }
       return null;
     }
   },
 
   async getUser(): Promise<User | null> {
     try {
-      const userStr = await AsyncStorage.getItem(USER_KEY);
+      let userStr = await AsyncStorage.getItem(USER_KEY);
+      
+      // Fallback на localStorage для iOS PWA
+      if (!userStr && Platform.OS === 'web' && typeof localStorage !== 'undefined') {
+        userStr = localStorage.getItem(USER_KEY);
+        if (userStr) {
+          await AsyncStorage.setItem(USER_KEY, userStr);
+        }
+      }
+      
       return userStr ? JSON.parse(userStr) : null;
     } catch {
+      if (Platform.OS === 'web' && typeof localStorage !== 'undefined') {
+        const userStr = localStorage.getItem(USER_KEY);
+        return userStr ? JSON.parse(userStr) : null;
+      }
       return null;
     }
   },
 
   async setAuth(token: string, user: User): Promise<void> {
+    // Сохраняем в оба хранилища для надёжности
     await AsyncStorage.setItem(AUTH_TOKEN_KEY, token);
     await AsyncStorage.setItem(USER_KEY, JSON.stringify(user));
+    
+    // Дублируем в localStorage для iOS PWA
+    if (Platform.OS === 'web' && typeof localStorage !== 'undefined') {
+      localStorage.setItem(AUTH_TOKEN_KEY, token);
+      localStorage.setItem(USER_KEY, JSON.stringify(user));
+    }
   },
 
   async clearAuth(): Promise<void> {
     await AsyncStorage.removeItem(AUTH_TOKEN_KEY);
     await AsyncStorage.removeItem(USER_KEY);
+    
+    // Очищаем и localStorage
+    if (Platform.OS === 'web' && typeof localStorage !== 'undefined') {
+      localStorage.removeItem(AUTH_TOKEN_KEY);
+      localStorage.removeItem(USER_KEY);
+    }
   },
 };
 
@@ -275,6 +319,7 @@ export function useAuth() {
 
 // Компонент экрана входа
 export default function LoginScreen({ onLogin }: { onLogin?: () => void }) {
+  const { colors, isDark } = useTheme();
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [mode, setMode] = useState<'login' | 'register'>('login');
@@ -361,10 +406,10 @@ export default function LoginScreen({ onLogin }: { onLogin?: () => void }) {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
       <KeyboardAvoidingView 
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        style={styles.container}
+        style={[styles.container, { backgroundColor: colors.background }]}
       >
         <ScrollView 
           contentContainerStyle={styles.scrollContent}
@@ -372,12 +417,12 @@ export default function LoginScreen({ onLogin }: { onLogin?: () => void }) {
         >
           {/* Логотип и название */}
           <View style={styles.header}>
-            <View style={styles.logoContainer}>
-              <Ionicons name="leaf" size={48} color="#8B7355" />
+            <View style={[styles.logoContainer, { backgroundColor: isDark ? colors.surface : '#F5F0E8' }]}>
+              <Ionicons name="leaf" size={48} color={colors.primary} />
             </View>
-            <Text style={styles.title}>Nous</Text>
-            <Text style={styles.subtitle}>νοῦς</Text>
-            <Text style={styles.description}>
+            <Text style={[styles.title, { color: colors.text }]}>Nous</Text>
+            <Text style={[styles.subtitle, { color: colors.textSecondary }]}>νοῦς</Text>
+            <Text style={[styles.description, { color: colors.textSecondary }]}>
               Пространство для мыслей{'\n'}и рефлексии
             </Text>
           </View>
@@ -385,12 +430,12 @@ export default function LoginScreen({ onLogin }: { onLogin?: () => void }) {
           {/* Форма входа/регистрации */}
           <View style={styles.formContainer}>
             {mode === 'register' && (
-              <View style={styles.inputContainer}>
-                <Ionicons name="person-outline" size={20} color="#8B7355" style={styles.inputIcon} />
+              <View style={[styles.inputContainer, { backgroundColor: colors.cardBackground, borderColor: isDark ? colors.border : '#E8E1D5' }]}>
+                <Ionicons name="person-outline" size={20} color={colors.primary} style={styles.inputIcon} />
                 <TextInput
-                  style={styles.input}
+                  style={[styles.input, { color: colors.text }]}
                   placeholder="Имя"
-                  placeholderTextColor="#C4B8A8"
+                  placeholderTextColor={colors.textSecondary}
                   value={name}
                   onChangeText={setName}
                   autoCapitalize="words"
@@ -399,33 +444,44 @@ export default function LoginScreen({ onLogin }: { onLogin?: () => void }) {
               </View>
             )}
 
-            <View style={styles.inputContainer}>
-              <Ionicons name="mail-outline" size={20} color="#8B7355" style={styles.inputIcon} />
+            <View style={[styles.inputContainer, { backgroundColor: colors.cardBackground, borderColor: isDark ? colors.border : '#E8E1D5' }]}>
+              <Ionicons name="mail-outline" size={20} color={colors.primary} style={styles.inputIcon} />
               <TextInput
-                style={styles.input}
+                style={[styles.input, { color: colors.text }]}
                 placeholder="Email"
-                placeholderTextColor="#C4B8A8"
+                placeholderTextColor={colors.textSecondary}
                 value={email}
                 onChangeText={setEmail}
                 keyboardType="email-address"
                 autoCapitalize="none"
                 autoCorrect={false}
+                autoComplete="email"
+                textContentType="emailAddress"
+                inputMode="email"
                 editable={!isLoading}
+                // @ts-ignore - web attributes
+                name="email"
+                id="email"
               />
             </View>
 
-            <View style={styles.inputContainer}>
-              <Ionicons name="lock-closed-outline" size={20} color="#8B7355" style={styles.inputIcon} />
+            <View style={[styles.inputContainer, { backgroundColor: colors.cardBackground, borderColor: isDark ? colors.border : '#E8E1D5' }]}>
+              <Ionicons name="lock-closed-outline" size={20} color={colors.primary} style={styles.inputIcon} />
               <TextInput
-                style={styles.input}
+                style={[styles.input, { color: colors.text }]}
                 placeholder="Пароль"
-                placeholderTextColor="#C4B8A8"
+                placeholderTextColor={colors.textSecondary}
                 value={password}
                 onChangeText={setPassword}
                 secureTextEntry={!showPassword}
                 autoCapitalize="none"
                 autoCorrect={false}
+                autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
+                textContentType={mode === 'login' ? 'password' : 'newPassword'}
                 editable={!isLoading}
+                // @ts-ignore - web attributes
+                name="password"
+                id="password"
               />
               <TouchableOpacity
                 onPress={() => setShowPassword(!showPassword)}
@@ -434,20 +490,20 @@ export default function LoginScreen({ onLogin }: { onLogin?: () => void }) {
                 <Ionicons 
                   name={showPassword ? "eye-outline" : "eye-off-outline"} 
                   size={20} 
-                  color="#8B7355" 
+                  color={colors.primary} 
                 />
               </TouchableOpacity>
             </View>
 
             <TouchableOpacity
-              style={[styles.emailButton, isLoading && styles.buttonDisabled]}
+              style={[styles.emailButton, { backgroundColor: colors.primary }, isLoading && styles.buttonDisabled]}
               onPress={handleEmailAuth}
               disabled={isLoading}
             >
               {isLoading ? (
-                <ActivityIndicator color="#FAF8F5" />
+                <ActivityIndicator color={colors.background} />
               ) : (
-                <Text style={styles.emailButtonText}>
+                <Text style={[styles.emailButtonText, { color: colors.background }]}>
                   {mode === 'login' ? 'Войти' : 'Зарегистрироваться'}
                 </Text>
               )}
@@ -458,7 +514,7 @@ export default function LoginScreen({ onLogin }: { onLogin?: () => void }) {
               disabled={isLoading}
               style={styles.toggleModeButton}
             >
-              <Text style={styles.toggleModeText}>
+              <Text style={[styles.toggleModeText, { color: colors.primary }]}>
                 {mode === 'login' 
                   ? 'Нет аккаунта? Зарегистрируйтесь' 
                   : 'Уже есть аккаунт? Войдите'}
@@ -466,26 +522,26 @@ export default function LoginScreen({ onLogin }: { onLogin?: () => void }) {
             </TouchableOpacity>
 
             <View style={styles.divider}>
-              <View style={styles.dividerLine} />
-              <Text style={styles.dividerText}>или</Text>
-              <View style={styles.dividerLine} />
+              <View style={[styles.dividerLine, { backgroundColor: isDark ? colors.border : '#E8E1D5' }]} />
+              <Text style={[styles.dividerText, { color: colors.textSecondary }]}>или</Text>
+              <View style={[styles.dividerLine, { backgroundColor: isDark ? colors.border : '#E8E1D5' }]} />
             </View>
 
             <TouchableOpacity
-              style={[styles.googleButton, (!request || isLoading) && styles.buttonDisabled]}
+              style={[styles.googleButton, { backgroundColor: colors.cardBackground, borderColor: isDark ? colors.border : '#E8E1D5' }, (!request || isLoading) && styles.buttonDisabled]}
               onPress={handleGooglePress}
               disabled={!request || isLoading}
               activeOpacity={0.8}
             >
               {isLoading ? (
-                <ActivityIndicator color="#5D4E3A" />
+                <ActivityIndicator color={colors.text} />
               ) : (
                 <>
                   <Image
                     source={{ uri: 'https://www.google.com/favicon.ico' }}
                     style={styles.googleIcon}
                   />
-                  <Text style={styles.googleButtonText}>Войти через Google</Text>
+                  <Text style={[styles.googleButtonText, { color: colors.text }]}>Войти через Google</Text>
                 </>
               )}
             </TouchableOpacity>
@@ -494,7 +550,7 @@ export default function LoginScreen({ onLogin }: { onLogin?: () => void }) {
               <Text style={styles.errorText}>{error}</Text>
             )}
 
-            <Text style={styles.privacyText}>
+            <Text style={[styles.privacyText, { color: colors.textSecondary }]}>
               Входя в приложение, вы соглашаетесь с{'\n'}
               условиями использования
             </Text>

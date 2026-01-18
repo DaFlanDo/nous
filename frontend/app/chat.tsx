@@ -429,17 +429,19 @@ export default function ChatScreen() {
       ]}
     >
       {item.role === 'assistant' && (
-        <View style={styles.avatarContainer}>
-          <Ionicons name="sparkles" size={16} color="#8B7355" />
+        <View style={[styles.avatarContainer, { backgroundColor: isDark ? colors.surface : '#F0EBE3' }]}>
+          <Ionicons name="sparkles" size={16} color={colors.primary} />
         </View>
       )}
       <View
         style={[
           styles.messageBubble,
-          item.role === 'user' ? styles.userBubble : styles.assistantBubble,
+          item.role === 'user' 
+            ? [styles.userBubble, { backgroundColor: colors.primary }] 
+            : [styles.assistantBubble, { backgroundColor: colors.cardBackground }],
         ]}
       >
-        <Text style={[styles.messageText, item.role === 'user' && styles.userMessageText]}>
+        <Text style={[styles.messageText, { color: item.role === 'user' ? '#FFFFFF' : colors.text }]}>
           {item.content}
         </Text></View>
     </View>
@@ -449,17 +451,18 @@ export default function ChatScreen() {
     <TouchableOpacity
       style={[
         styles.sessionItem,
-        currentSessionId === item.id && styles.sessionItemActive
+        { backgroundColor: colors.cardBackground },
+        currentSessionId === item.id && [styles.sessionItemActive, { borderColor: colors.primary }]
       ]}
       onPress={() => loadSession(item.id)}
       activeOpacity={0.7}
     >
       <View style={styles.sessionInfo}>
-        <Text style={styles.sessionTitle} numberOfLines={1}>{item.title}</Text>
-        <Text style={styles.sessionDate}>
+        <Text style={[styles.sessionTitle, { color: colors.text }]} numberOfLines={1}>{item.title}</Text>
+        <Text style={[styles.sessionDate, { color: colors.textSecondary }]}>
           {format(new Date(item.updated_at), 'd MMM, HH:mm', { locale: ru })}
         </Text>
-        <Text style={styles.sessionMessages}>
+        <Text style={[styles.sessionMessages, { color: colors.textSecondary }]}>
           {item.messages?.length || 0} сообщений
         </Text>
       </View>
@@ -468,7 +471,7 @@ export default function ChatScreen() {
         onPress={() => deleteSession(item.id)}
         hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
       >
-        <Ionicons name="trash-outline" size={18} color="#C4B8A8" />
+        <Ionicons name="trash-outline" size={18} color={colors.textSecondary} />
       </TouchableOpacity>
     </TouchableOpacity>
   );
@@ -501,47 +504,47 @@ export default function ChatScreen() {
   }
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
-      <View style={styles.header}>
+    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
+      <View style={[styles.header, { borderBottomColor: colors.border }]}>
         <View>
           <View style={styles.headerRow}>
-            <Text style={styles.headerTitle}>Диалог</Text>
-            <Text style={styles.greekAccent}>νοῦς</Text>
+            <Text style={[styles.headerTitle, { color: colors.text }]}>Диалог</Text>
+            <Text style={[styles.greekAccent, { color: colors.textSecondary }]}>νοῦς</Text>
           </View>
-          <Text style={styles.headerSubtitle}>Nous AI</Text>
+          <Text style={[styles.headerSubtitle, { color: colors.textSecondary }]}>Nous AI</Text>
         </View>
         <View style={styles.headerActions}>
           <TouchableOpacity 
             onPress={() => setShowSessionsModal(true)} 
-            style={styles.historyBtn}
+            style={[styles.historyBtn, { backgroundColor: isDark ? colors.surface : '#F0EBE3' }]}
           >
-            <Ionicons name="time-outline" size={20} color="#8B7355" />
+            <Ionicons name="time-outline" size={20} color={colors.primary} />
           </TouchableOpacity>
           {messages.length > 0 && (
             <>
               <TouchableOpacity 
                 onPress={createSummary} 
-                style={styles.summaryBtn}
+                style={[styles.summaryBtn, { backgroundColor: isDark ? colors.surface : '#F0EBE3' }]}
                 disabled={creatingSummary || messages.length < 2}
               >
                 {creatingSummary ? (
-                  <ActivityIndicator size="small" color="#8B7355" />
+                  <ActivityIndicator size="small" color={colors.primary} />
                 ) : (
-                  <Ionicons name="document-text-outline" size={20} color="#8B7355" />
+                  <Ionicons name="document-text-outline" size={20} color={colors.primary} />
                 )}
               </TouchableOpacity>
               <TouchableOpacity 
                 onPress={updateStateFromChat} 
-                style={styles.stateBtn}
+                style={[styles.stateBtn, { backgroundColor: isDark ? colors.surface : '#F0EBE3' }]}
                 disabled={updatingState}
               >
                 {updatingState ? (
-                  <ActivityIndicator size="small" color="#8B7355" />
+                  <ActivityIndicator size="small" color={colors.primary} />
                 ) : (
-                  <Ionicons name="pulse" size={20} color="#8B7355" />
+                  <Ionicons name="pulse" size={20} color={colors.primary} />
                 )}
               </TouchableOpacity><TouchableOpacity onPress={clearChat} style={styles.clearBtn}>
-                <Ionicons name="add-outline" size={22} color="#A89F91" />
+                <Ionicons name="add-outline" size={22} color={colors.textSecondary} />
               </TouchableOpacity>
             </>
           )}
@@ -555,39 +558,39 @@ export default function ChatScreen() {
       >
         {messages.length === 0 ? (
           <View style={styles.emptyContainer}>
-            <View style={styles.aiIcon}>
-              <Ionicons name="sparkles" size={40} color="#8B7355" />
+            <View style={[styles.aiIcon, { backgroundColor: isDark ? colors.surface : '#F0EBE3' }]}>
+              <Ionicons name="sparkles" size={40} color={colors.primary} />
             </View>
-            <Text style={styles.emptyTitle}>Nous AI</Text>
-            <Text style={styles.emptyText}>
+            <Text style={[styles.emptyTitle, { color: colors.text }]}>Nous AI</Text>
+            <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
               Поделитесь тем, что вас занимает.{"\n"}
               Я помогу разобраться в мыслях.
             </Text>
 
             <View style={styles.suggestions}>
               <TouchableOpacity
-                style={styles.suggestionBtn}
+                style={[styles.suggestionBtn, { backgroundColor: colors.cardBackground }]}
                 onPress={() => setInputText('Хочу разобраться в своих чувствах...')}
                 activeOpacity={0.7}
               >
-                <Ionicons name="heart-outline" size={18} color="#8B7355" />
-                <Text style={styles.suggestionBtnText}>Разобраться в чувствах</Text>
+                <Ionicons name="heart-outline" size={18} color={colors.primary} />
+                <Text style={[styles.suggestionBtnText, { color: colors.text }]}>Разобраться в чувствах</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={styles.suggestionBtn}
+                style={[styles.suggestionBtn, { backgroundColor: colors.cardBackground }]}
                 onPress={() => setInputText('Помоги мне подвести итоги дня...')}
                 activeOpacity={0.7}
               >
-                <Ionicons name="sunny-outline" size={18} color="#8B7355" />
-                <Text style={styles.suggestionBtnText}>Подвести итоги дня</Text>
+                <Ionicons name="sunny-outline" size={18} color={colors.primary} />
+                <Text style={[styles.suggestionBtnText, { color: colors.text }]}>Подвести итоги дня</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={styles.suggestionBtn}
+                style={[styles.suggestionBtn, { backgroundColor: colors.cardBackground }]}
                 onPress={() => setInputText('Хочу понять, что меня беспокоит...')}
                 activeOpacity={0.7}
               >
-                <Ionicons name="cloud-outline" size={18} color="#8B7355" />
-                <Text style={styles.suggestionBtnText}>Понять беспокойство</Text>
+                <Ionicons name="cloud-outline" size={18} color={colors.primary} />
+                <Text style={[styles.suggestionBtnText, { color: colors.text }]}>Понять беспокойство</Text>
               </TouchableOpacity>
             </View>
 
@@ -596,8 +599,8 @@ export default function ChatScreen() {
                 style={styles.viewHistoryBtn}
                 onPress={() => setShowSessionsModal(true)}
               >
-                <Ionicons name="time-outline" size={18} color="#8B7355" />
-                <Text style={styles.viewHistoryText}>Посмотреть историю диалогов</Text>
+                <Ionicons name="time-outline" size={18} color={colors.primary} />
+                <Text style={[styles.viewHistoryText, { color: colors.primary }]}>Посмотреть историю диалогов</Text>
               </TouchableOpacity>
             )}
           </View>
@@ -616,6 +619,7 @@ export default function ChatScreen() {
         {showChecklistSuggestion && checklistSuggestion && (<Animated.View 
             style={[
               styles.checklistSuggestion,
+              { backgroundColor: colors.cardBackground, borderColor: colors.border },
               {
                 opacity: suggestionAnim,
                 transform: [{
@@ -628,35 +632,35 @@ export default function ChatScreen() {
             ]}
           >
             <View style={styles.suggestionHeader}>
-              <View style={styles.suggestionIcon}>
-                <Ionicons name="checkbox-outline" size={20} color="#8B7355" />
+              <View style={[styles.suggestionIcon, { backgroundColor: isDark ? colors.surface : '#F0EBE3' }]}>
+                <Ionicons name="checkbox-outline" size={20} color={colors.primary} />
               </View>
-              <Text style={styles.suggestionTitle}>Добавить в чеклист?</Text>
+              <Text style={[styles.suggestionTitle, { color: colors.text }]}>Добавить в чеклист?</Text>
               <TouchableOpacity onPress={dismissChecklistSuggestion} style={styles.dismissBtn}>
-                <Ionicons name="close" size={20} color="#A89F91" />
+                <Ionicons name="close" size={20} color={colors.textSecondary} />
               </TouchableOpacity>
             </View>
             
-            <Text style={styles.suggestionReasoning}>{checklistSuggestion.reasoning}</Text>
+            <Text style={[styles.suggestionReasoning, { color: colors.textSecondary }]}>{checklistSuggestion.reasoning}</Text>
             
             <View style={styles.suggestionItems}>
               {checklistSuggestion.items.map((item, index) => (
                 <View key={index} style={styles.suggestionItemRow}>
-                  <View style={styles.suggestionCheckbox} />
-                  <Text style={styles.suggestionItemText}>{item}</Text>
+                  <View style={[styles.suggestionCheckbox, { borderColor: colors.border }]} />
+                  <Text style={[styles.suggestionItemText, { color: colors.text }]}>{item}</Text>
                 </View>
               ))}
             </View>
             
             <View style={styles.suggestionActions}>
               <TouchableOpacity 
-                style={styles.declineBtn} 
+                style={[styles.declineBtn, { borderColor: colors.border }]} 
                 onPress={dismissChecklistSuggestion}
               >
-                <Text style={styles.declineBtnText}>Не сейчас</Text>
+                <Text style={[styles.declineBtnText, { color: colors.textSecondary }]}>Не сейчас</Text>
               </TouchableOpacity>
               <TouchableOpacity 
-                style={styles.acceptBtn} 
+                style={[styles.acceptBtn, { backgroundColor: colors.primary }]} 
                 onPress={acceptChecklist}
               >
                 <Ionicons name="checkmark" size={18} color="#FFFFFF" />
@@ -667,27 +671,27 @@ export default function ChatScreen() {
         )}
 
         {loading && (
-          <View style={styles.typingIndicator}>
+          <View style={[styles.typingIndicator, { backgroundColor: colors.cardBackground }]}>
             <View style={styles.typingDots}>
-              <View style={[styles.dot, styles.dot1]} />
-              <View style={[styles.dot, styles.dot2]} />
-              <View style={[styles.dot, styles.dot3]} />
+              <View style={[styles.dot, styles.dot1, { backgroundColor: colors.primary }]} />
+              <View style={[styles.dot, styles.dot2, { backgroundColor: colors.primary }]} />
+              <View style={[styles.dot, styles.dot3, { backgroundColor: colors.primary }]} />
             </View>
-            <Text style={styles.typingText}>Думаю...</Text>
+            <Text style={[styles.typingText, { color: colors.textSecondary }]}>Думаю...</Text>
           </View>
         )}
       </KeyboardAvoidingView>
 
       {/* Поле ввода - закреплено над Tab Bar */}
-      <View style={styles.inputWrapper}>
-        <View style={styles.inputContainer}>
+      <View style={[styles.inputWrapper, { backgroundColor: colors.background, borderTopColor: colors.border }]}>
+        <View style={[styles.inputContainer, { backgroundColor: colors.cardBackground, borderColor: colors.border }]}>
           <TextInput
             style={[
               styles.input,
-              { height: Math.min(Math.max(inputHeight, 44), 150) }
+              { height: Math.min(Math.max(inputHeight, 44), 150), color: colors.text }
             ]}
             placeholder="О чём хотите поговорить?"
-            placeholderTextColor="#A89F91"
+            placeholderTextColor={colors.textSecondary}
             value={inputText}
             onChangeText={setInputText}
             onContentSizeChange={(e) => {
@@ -699,7 +703,7 @@ export default function ChatScreen() {
             maxLength={2000}
           />
           <TouchableOpacity
-            style={[styles.sendButton, (!inputText.trim() || loading) && styles.sendButtonDisabled]}
+            style={[styles.sendButton, { backgroundColor: colors.primary }, (!inputText.trim() || loading) && styles.sendButtonDisabled]}
             onPress={sendMessage}
             disabled={!inputText.trim() || loading}
             activeOpacity={0.7}
@@ -711,25 +715,25 @@ export default function ChatScreen() {
 
       {/* Модальное окно истории сеансов */}
       <Modal visible={showSessionsModal} animationType="slide" transparent={false}>
-        <SafeAreaView style={styles.modalContainer}>
-          <View style={styles.modalHeader}>
+        <SafeAreaView style={[styles.modalContainer, { backgroundColor: colors.background }]}>
+          <View style={[styles.modalHeader, { borderBottomColor: colors.border }]}>
             <TouchableOpacity onPress={() => setShowSessionsModal(false)}>
-              <Text style={styles.modalCloseText}>Закрыть</Text>
+              <Text style={[styles.modalCloseText, { color: colors.primary }]}>Закрыть</Text>
             </TouchableOpacity>
-            <Text style={styles.modalTitle}>История диалогов</Text>
+            <Text style={[styles.modalTitle, { color: colors.text }]}>История диалогов</Text>
             <View style={{ width: 24 }} />
           </View>
 
           {loadingSessions ? (
             <View style={styles.loadingContainer}>
-              <ActivityIndicator size="large" color="#8B7355" /></View>
+              <ActivityIndicator size="large" color={colors.primary} /></View>
           ) : sessions.length === 0 ? (
             <View style={styles.emptySessionsContainer}>
-              <View style={styles.emptySessionsIcon}>
-                <Ionicons name="chatbubbles-outline" size={48} color="#C4B8A8" />
+              <View style={[styles.emptySessionsIcon, { backgroundColor: isDark ? colors.surface : '#F0EBE3' }]}>
+                <Ionicons name="chatbubbles-outline" size={48} color={colors.textSecondary} />
               </View>
-              <Text style={styles.emptySessionsText}>Нет сохранённых диалогов</Text>
-              <Text style={styles.emptySessionsSubtext}>
+              <Text style={[styles.emptySessionsText, { color: colors.text }]}>Нет сохранённых диалогов</Text>
+              <Text style={[styles.emptySessionsSubtext, { color: colors.textSecondary }]}>
                 Начните новый диалог, отправив первое сообщение
               </Text>
             </View>

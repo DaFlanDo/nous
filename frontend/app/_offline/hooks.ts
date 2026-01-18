@@ -145,13 +145,18 @@ export function useNotes(options: UseNotesOptions = {}): UseNotesReturn {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   
-  const { isOnline, isReady } = useOffline({ token });
+  const { isOnline } = useOffline({ token });
+
+  // Передаём токен в репозиторий для синхронных операций
+  useEffect(() => {
+    notesRepository.setToken(token);
+  }, [token]);
 
   const API_URL = process.env.EXPO_PUBLIC_BACKEND_URL || 'http://localhost:8000';
 
-  // Загрузка заметок
+  // Загрузка заметок - без проверки isReady, просто грузим
   const refresh = useCallback(async () => {
-    if (!isReady) return;
+    console.log('[useNotes] Refresh called, token:', !!token, 'isOnline:', isOnline);
     
     setLoading(true);
     setError(null);
@@ -159,11 +164,13 @@ export function useNotes(options: UseNotesOptions = {}): UseNotesReturn {
     try {
       // Сначала показываем локальные данные
       const localNotes = await notesRepository.getAll();
+      console.log('[useNotes] Local notes:', localNotes.length);
       setNotes(localNotes);
 
       // Если онлайн - подтягиваем с сервера
       if (isOnline && token) {
         try {
+          console.log('[useNotes] Fetching from server...');
           const response = await fetch(`${API_URL}/api/notes`, {
             headers: { 'Authorization': `Bearer ${token}` },
             signal: AbortSignal.timeout(5000),
@@ -171,10 +178,12 @@ export function useNotes(options: UseNotesOptions = {}): UseNotesReturn {
 
           if (response.ok) {
             const serverNotes = await response.json();
+            console.log('[useNotes] Server notes:', serverNotes.length);
             await notesRepository.saveFromServer(serverNotes);
             
             // Обновляем список
             const updatedNotes = await notesRepository.getAll();
+            console.log('[useNotes] Updated notes:', updatedNotes.length);
             setNotes(updatedNotes);
           }
         } catch (fetchError) {
@@ -183,16 +192,14 @@ export function useNotes(options: UseNotesOptions = {}): UseNotesReturn {
         }
       }
     } catch (err) {
+      console.error('[useNotes] Error:', err);
       setError(String(err));
     } finally {
       setLoading(false);
     }
-  }, [isReady, isOnline, token]);
+  }, [isOnline, token]);
 
-  // Начальная загрузка
-  useEffect(() => {
-    refresh();
-  }, [refresh]);
+  // Убрали начальный refresh() - теперь это делает useFocusEffect в index.tsx
 
   // Создание заметки
   const createNote = useCallback(async (title: string, content: string): Promise<Note | null> => {
