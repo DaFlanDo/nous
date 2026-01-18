@@ -9,7 +9,7 @@
  */
 
 // Версия SW — ОБЯЗАТЕЛЬНО менять при каждом деплое!
-const SW_VERSION = '2.3.0';
+const SW_VERSION = '2.4.0';
 const CACHE_PREFIX = 'nous-';
 const CACHE_NAME = `${CACHE_PREFIX}${SW_VERSION}`;
 
@@ -149,7 +149,7 @@ self.addEventListener('activate', (event) => {
   console.log(`[SW ${SW_VERSION}] Activating...`);
   
   event.waitUntil(
-    // Удаляем старые кэши
+    // Только удаляем старые кэши, НЕ перехватываем клиентов
     caches.keys()
       .then((cacheNames) => {
         return Promise.all(
@@ -162,21 +162,9 @@ self.addEventListener('activate', (event) => {
         );
       })
       .then(() => {
-        console.log(`[SW ${SW_VERSION}] Claiming clients`);
-        // Берём контроль над всеми клиентами
-        return self.clients.claim();
-      })
-      .then(() => {
-        // Уведомляем все окна об обновлении
-        return self.clients.matchAll({ type: 'window' });
-      })
-      .then((clients) => {
-        clients.forEach(client => {
-          client.postMessage({
-            type: 'SW_UPDATED',
-            version: SW_VERSION
-          });
-        });
+        console.log(`[SW ${SW_VERSION}] Activated (no auto-claim)`);
+        // НЕ вызываем clients.claim() - это может сбрасывать страницу
+        // Новый SW возьмёт контроль только после перезагрузки страницы пользователем
       })
   );
 });
