@@ -65,12 +65,18 @@ export default function NoteEditScreen() {
   const { token } = useAuthContext();
   const { isOnline } = useOffline({ token });
 
+  // Передаём токен в репозиторий для синхронного сохранения на сервер
+  useEffect(() => {
+    notesRepository.setToken(token);
+  }, [token]);
+
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(false);
   const [contentHeight, setContentHeight] = useState(100);
   const lastHeight = useRef(100);
+  const scrollViewRef = useRef<ScrollView>(null);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const initialContent = useRef({ title: '', content: '' });
 
@@ -164,8 +170,14 @@ export default function NoteEditScreen() {
   const clearDraft = useCallback(async () => {
     try {
       await AsyncStorage.removeItem(DRAFT_KEY);
+      // Также очищаем localStorage
+      if (Platform.OS === 'web' && typeof localStorage !== 'undefined') {
+        localStorage.removeItem(DRAFT_KEY);
+      }
       lastSavedDraft.current = { title: '', content: '' };
-    } catch (e) {}
+    } catch (e) {
+      console.error('[Draft] Clear error:', e);
+    }
   }, []);
 
   // Автосохранение при изменении текста
@@ -249,21 +261,38 @@ export default function NoteEditScreen() {
       
       if (isNew) {
         if (draft) {
-          // Восстанавливаем черновик
-          setTitle(draft.title || '');
-          setContent(draft.content || '');
-          const lines = (draft.content || '').split('\n').length;
-          const height = Math.max(100, lines * 32);
-          setContentHeight(height);
-          lastHeight.current = height;
-          initialContent.current = { title: '', content: '' };
-          setHasUnsavedChanges(true);
-          
-          // Показываем уведомление о восстановлении
+          // Спрашиваем пользователя хочет ли он восстановить черновик
           Alert.alert(
-            '✨ Черновик восстановлен',
-            'Найден несохранённый черновик. Продолжайте писать!',
-            [{ text: 'OK' }]
+            '✨ Найден черновик',
+            'Восстановить несохранённый текст?',
+            [
+              { 
+                text: 'Начать заново', 
+                style: 'destructive',
+                onPress: async () => {
+                  await clearDraft();
+                  setTitle('');
+                  setContent('');
+                  setContentHeight(100);
+                  lastHeight.current = 100;
+                  initialContent.current = { title: '', content: '' };
+                  setHasUnsavedChanges(false);
+                }
+              },
+              { 
+                text: 'Восстановить', 
+                onPress: () => {
+                  setTitle(draft.title || '');
+                  setContent(draft.content || '');
+                  const lines = (draft.content || '').split('\n').length;
+                  const height = Math.max(100, lines * 32);
+                  setContentHeight(height);
+                  lastHeight.current = height;
+                  initialContent.current = { title: '', content: '' };
+                  setHasUnsavedChanges(true);
+                }
+              },
+            ]
           );
         } else {
           setTitle('');
@@ -274,32 +303,91 @@ export default function NoteEditScreen() {
           setHasUnsavedChanges(false);
         }
       } else if (noteId) {
-        // Для существующей заметки - проверяем черновик
-        if (draft && (draft.title !== '' || draft.content !== '')) {
-          Alert.alert(
-            'Найден черновик',
-            'Восстановить несохранённые изменения?',
-            [
-              { 
-                text: 'Нет, загрузить оригинал', 
-                onPress: () => {
-                  clearDraft();
-                  loadNote(noteId);
+        // Для существующей заметки - сначала загружаем её, потом проверяем черновик
+        setLoading(true);
+        try {
+          // Загружаем оригинал заметки
+          const localNote = await notesRepository.getById(noteId);
+          const originalTitle = localNote?.title || '';
+          const originalContent = localNote?.content || '';
+          
+          // Проверяем черновик
+          if (draft && draft.noteId === noteId) {
+            // Черновик есть и он для этой заметки
+            // Проверяем отличается ли черновик от оригинала
+            const draftChanged = draft.title !== originalTitle || draft.content !== originalContent;
+            
+            if (draftChanged && (draft.title || draft.content)) {
+              // Черновик отличается - спрашиваем
+              setLoading(false);
+              Alert.alert(
+                'Найден черновик',
+                'Восстановить несохранённые изменения?',
+                [
+                  { 
+                    text: 'Нет, загрузить оригинал', 
+                    onPress: () => {
+                      clearDraft();
+                      setTitle(originalTitle);
+                      setContent(originalContent);
+                      initialContent.current = { title: originalTitle, content: originalContent };
+                      const initialHeight = Math.max(100, originalContent.split('\n').length * 32);
+                      setContentHeight(initialHeight);
+                      lastHeight.current = initialHeight;
+                    }
+                  },
+                  { 
+                    text: 'Да, восстановить', 
+                    onPress: () => {
+                      setTitle(draft.title || '');
+                      setContent(draft.content || '');
+                      initialContent.current = { title: originalTitle, content: originalContent };
+                      setHasUnsavedChanges(true);
+                    }
+                  },
+                ]
+              );
+            } else {
+              // Черновик такой же как оригинал - просто загружаем и очищаем черновик
+              await clearDraft();
+              setTitle(originalTitle);
+              setContent(originalContent);
+              initialContent.current = { title: originalTitle, content: originalContent };
+              const initialHeight = Math.max(100, originalContent.split('\n').length * 32);
+              setContentHeight(initialHeight);
+              lastHeight.current = initialHeight;
+              setLoading(false);
+            }
+          } else {
+            // Черновика нет или он для другой заметки - просто загружаем
+            setTitle(originalTitle);
+            setContent(originalContent);
+            initialContent.current = { title: originalTitle, content: originalContent };
+            const initialHeight = Math.max(100, originalContent.split('\n').length * 32);
+            setContentHeight(initialHeight);
+            lastHeight.current = initialHeight;
+            setLoading(false);
+            
+            // Если онлайн - пробуем обновить с сервера
+            if (isOnline && token && !noteId.startsWith('local_')) {
+              try {
+                const response = await fetch(`${API_URL}/api/notes/${noteId}`, {
+                  headers: { 'Authorization': `Bearer ${token}` },
+                });
+                if (response.ok) {
+                  const note = await response.json();
+                  setTitle(note.title);
+                  setContent(note.content);
+                  initialContent.current = { title: note.title, content: note.content };
                 }
-              },
-              { 
-                text: 'Да, восстановить', 
-                onPress: () => {
-                  setTitle(draft.title || '');
-                  setContent(draft.content || '');
-                  initialContent.current = { title: '', content: '' };
-                  setHasUnsavedChanges(true);
-                }
-              },
-            ]
-          );
-        } else {
-          loadNote(noteId);
+              } catch (e) {
+                // Сервер недоступен - используем локальные данные
+              }
+            }
+          }
+        } catch (error) {
+          console.error('Error loading note:', error);
+          setLoading(false);
         }
       }
     };
@@ -315,26 +403,25 @@ export default function NoteEditScreen() {
     setHasUnsavedChanges(hasChanges);
   }, [title, content]);
 
-  const handleBack = () => {
-    if ((isNew || hasUnsavedChanges) && (title.trim() || content.trim())) {
-      Alert.alert(
-        'Сохранить заметку?',
-        'Хотите сохранить изменения?',
-        [
-          { text: 'Отмена', style: 'cancel' },
-          { 
-            text: 'Не сохранять', 
-            style: 'destructive', 
-            onPress: async () => {
-              await clearDraft();
-              router.back();
-            }
-          },
-          { text: 'Сохранить', onPress: saveNote },
-        ]
-      );
+  // Автосохранение при закрытии/обновлении страницы (Web)
+  // Черновик уже сохраняется через iOS lifecycle events
+
+  const handleBack = async () => {
+    // Автосохранение: если есть текст - сохраняем, иначе просто выходим
+    if (title.trim() || content.trim()) {
+      // Есть что сохранять - сохраняем автоматически
+      await saveNote();
     } else {
-      clearDraft();
+      // Пустая заметка - просто выходим
+      await clearDraft();
+      goBack();
+    }
+  };
+
+  const goBack = () => {
+    if (Platform.OS === 'web' && window.history.length <= 1) {
+      router.replace('/');
+    } else {
       router.back();
     }
   };
@@ -402,27 +489,35 @@ export default function NoteEditScreen() {
 
   const saveNote = async () => {
     if (!title.trim() && !content.trim()) {
-      await clearDraft(); // Очищаем пустой черновик
-      router.back();
+      await clearDraft();
+      goBack();
       return;
     }
 
     setSaving(true);
 
     try {
-      // Используем новый репозиторий для сохранения
       const noteIdToSave = (isNew || noteId.startsWith('new_')) ? null : noteId;
       const result = await notesRepository.save(noteIdToSave, title, content);
       
       if (result.success) {
-        await clearDraft(); // Очищаем черновик после успешного сохранения
-        router.back();
+        await clearDraft();
+        goBack();
       } else {
-        Alert.alert('Ошибка', result.error || 'Не удалось сохранить заметку');
+        // Ошибка сохранения - черновик остаётся
+        if (Platform.OS === 'web') {
+          alert('Не удалось сохранить. Черновик сохранён.');
+        } else {
+          Alert.alert('Ошибка', result.error || 'Не удалось сохранить заметку');
+        }
       }
     } catch (error) {
       console.error('Error saving note:', error);
-      Alert.alert('Ошибка', 'Не удалось сохранить заметку');
+      if (Platform.OS === 'web') {
+        alert('Не удалось сохранить. Черновик сохранён.');
+      } else {
+        Alert.alert('Ошибка', 'Не удалось сохранить заметку');
+      }
     } finally {
       setSaving(false);
     }
@@ -467,29 +562,18 @@ export default function NoteEditScreen() {
           {title || 'Новая запись'}
         </Text>
         
-        <TouchableOpacity 
-          onPress={saveNote} 
-          disabled={saving || !title.trim()}
-          style={[
-            styles.saveBtn,
-            isDark && styles.saveBtnDark,
-            (!title.trim() || saving) && styles.saveBtnDisabled,
-            isDark && (!title.trim() || saving) && styles.saveBtnDisabledDark,
-          ]}
-          activeOpacity={0.8}
-        >
+        {/* Индикатор статуса: спиннер при сохранении, галочка когда сохранено */}
+        <View style={styles.saveIndicator}>
           {saving ? (
-            <ActivityIndicator size="small" color={isDark ? '#1a1a1a' : '#fff'} />
+            <ActivityIndicator size="small" color={colors.primary} />
           ) : (
-            <Text style={[
-              styles.saveBtnText,
-              { color: isDark ? '#1a1a1a' : '#fff' },
-              (!title.trim() || saving) && { color: isDark ? 'rgba(26, 26, 26, 0.5)' : 'rgba(255, 255, 255, 0.7)' },
-            ]}>
-              Сохранить
-            </Text>
+            <Ionicons 
+              name="checkmark-circle" 
+              size={22} 
+              color={isDark ? '#4ade80' : '#22c55e'} 
+            />
           )}
-        </TouchableOpacity>
+        </View>
       </View>
 
       <KeyboardAvoidingView
@@ -498,13 +582,14 @@ export default function NoteEditScreen() {
         keyboardVerticalOffset={Platform.OS === 'ios' ? 44 : 0}
       >
         <ScrollView 
+          ref={scrollViewRef}
           style={[
             styles.paperContainer, 
             { backgroundColor: isDark ? '#1a1a1a' : colors.background }
           ]}
           contentContainerStyle={[
             styles.paperContentContainer,
-            { paddingBottom: 120 } // Отступ снизу чтобы текст не уходил под toolbar
+            { paddingBottom: 200 } // Большой отступ снизу - текст не прямо над клавиатурой
           ]}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
@@ -535,33 +620,9 @@ export default function NoteEditScreen() {
               value={title}
               onChangeText={setTitle}
               autoFocus={!title && !content}
+              selectionColor={isDark ? '#C5A572' : '#8B7355'}
+              cursorColor={isDark ? '#C5A572' : '#8B7355'}
             />
-
-            <TouchableOpacity 
-              style={[
-                styles.timeBtn, 
-                isDark ? styles.timeBtnDark : {},
-                { 
-                  backgroundColor: isDark ? 'rgba(197, 165, 114, 0.12)' : 'rgba(139, 115, 85, 0.1)',
-                  borderColor: isDark ? 'rgba(197, 165, 114, 0.3)' : 'transparent',
-                  borderWidth: isDark ? 1 : 0,
-                }
-              ]} 
-              onPress={insertCurrentTime}
-              activeOpacity={0.7}
-            >
-              <Ionicons 
-                name="time-outline" 
-                size={16} 
-                color={isDark ? '#E8CFA0' : colors.primary} 
-              />
-              <Text style={[
-                styles.timeBtnText, 
-                { color: isDark ? '#E8CFA0' : colors.primary }
-              ]}>
-                Добавить время
-              </Text>
-            </TouchableOpacity>
 
             <TextInput
               style={[
@@ -579,10 +640,46 @@ export default function NoteEditScreen() {
               textAlignVertical="top"
               scrollEnabled={false}
               onContentSizeChange={handleContentSizeChange}
+              selectionColor={isDark ? '#C5A572' : '#8B7355'}
+              cursorColor={isDark ? '#C5A572' : '#8B7355'}
+              onSelectionChange={(e) => {
+                // Автопрокрутка к позиции курсора
+                const { start } = e.nativeEvent.selection;
+                const textBeforeCursor = content.substring(0, start);
+                const linesBeforeCursor = textBeforeCursor.split('\n').length;
+                const lineHeight = 32; // соответствует lineHeight в стилях
+                const headerOffset = 150; // примерная высота заголовка и кнопки времени
+                const cursorY = headerOffset + (linesBeforeCursor * lineHeight);
+                
+                // Прокручиваем только если курсор ниже середины экрана
+                scrollViewRef.current?.scrollTo({
+                  y: Math.max(0, cursorY - 250), // 250px от верха экрана
+                  animated: true,
+                });
+              }}
             />
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
+
+      {/* Floating кнопка добавления времени - в стиле Apple */}
+      <TouchableOpacity 
+        style={[
+          styles.floatingTimeBtn,
+          { 
+            backgroundColor: isDark ? 'rgba(30, 30, 30, 0.95)' : 'rgba(255, 255, 255, 0.95)',
+            borderColor: isDark ? 'rgba(197, 165, 114, 0.3)' : 'rgba(139, 115, 85, 0.15)',
+          }
+        ]} 
+        onPress={insertCurrentTime}
+        activeOpacity={0.8}
+      >
+        <Ionicons 
+          name="time-outline" 
+          size={18} 
+          color={isDark ? '#E8CFA0' : '#8B7355'} 
+        />
+      </TouchableOpacity>
     </SafeAreaView>
   );
 }
@@ -613,10 +710,22 @@ const styles = StyleSheet.create({
     fontSize: 17,
     fontWeight: '600',
     letterSpacing: -0.3,
+    flex: 1,
+    textAlign: 'center',
   },
   closeBtn: {
     paddingVertical: 8,
     paddingHorizontal: 4,
+    width: 60,
+  },
+  saveIndicator: {
+    width: 60,
+    alignItems: 'flex-end',
+    justifyContent: 'center',
+  },
+  saveStatus: {
+    fontSize: 12,
+    fontWeight: '500',
   },
   saveBtn: {
     backgroundColor: '#8B7355',
@@ -668,15 +777,17 @@ const styles = StyleSheet.create({
   },
   noteContentArea: {
     paddingLeft: 52,
-    paddingRight: 20,
-    paddingTop: 20,
-    paddingBottom: 20,
+    paddingRight: 24,
+    paddingTop: 28,
+    paddingBottom: 60,
   },
   noteContentAreaDark: {
-    paddingLeft: 20,
-    paddingTop: 20,
+    paddingLeft: 24,
+    paddingRight: 24,
+    paddingTop: 32,
+    paddingBottom: 40,
     marginHorizontal: 16,
-    marginTop: 16,
+    marginTop: 20,
     backgroundColor: 'rgba(255, 255, 255, 0.04)',
     borderRadius: 20,
     borderWidth: 1,
@@ -693,28 +804,24 @@ const styles = StyleSheet.create({
     // @ts-ignore - web only property
     outlineWidth: 0,
   },
-  timeBtn: {
-    flexDirection: 'row',
+  floatingTimeBtn: {
+    position: 'absolute',
+    bottom: 100,
+    right: 20,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: 'rgba(255, 255, 255, 0.95)',
+    justifyContent: 'center',
     alignItems: 'center',
-    marginTop: 8,
-    marginBottom: 16,
-    paddingVertical: 10,
-    paddingHorizontal: 14,
-    backgroundColor: 'rgba(139, 115, 85, 0.1)',
-    borderRadius: 12,
-    alignSelf: 'flex-start',
-  },
-  timeBtnDark: {
-    shadowColor: '#C5A572',
-    shadowOffset: { width: 0, height: 0 },
+    borderWidth: 1,
+    borderColor: 'rgba(139, 115, 85, 0.15)',
+    // Тени в стиле Apple
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.15,
-    shadowRadius: 8,
-  },
-  timeBtnText: {
-    color: '#8B7355',
-    fontSize: 13,
-    marginLeft: 6,
-    fontWeight: '600',
+    shadowRadius: 12,
+    elevation: 8,
   },
   contentInput: {
     fontSize: 17,

@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -32,11 +32,16 @@ export default function NotesScreen() {
   const { notes, loading, refresh, deleteNote } = useNotes({ token });
   const router = useRouter();
 
+  // Ref для актуальной версии refresh
+  const refreshRef = useRef(refresh);
+  refreshRef.current = refresh;
+
   // Обновляем список заметок при возврате на экран
   useFocusEffect(
     useCallback(() => {
-      refresh();
-    }, [refresh])
+      console.log('[NotesScreen] Focus, refreshing');
+      refreshRef.current();
+    }, [])
   );
 
   const onRefresh = () => {

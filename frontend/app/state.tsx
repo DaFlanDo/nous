@@ -14,6 +14,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { format } from 'date-fns';
 import { ru } from 'date-fns/locale';
 import { useAuthContext } from './_layout';
+import { useTheme } from './theme';
 
 const API_URL = process.env.EXPO_PUBLIC_BACKEND_URL || 'http://localhost:8000';
 
@@ -58,13 +59,17 @@ const MetricBar = ({
   value, 
   icon, 
   color, 
-  description 
+  description,
+  isDark,
+  colors,
 }: { 
   label: string; 
   value: number; 
   icon: string; 
   color: string;
   description: string;
+  isDark: boolean;
+  colors: any;
 }) => {
   const percentage = (value / 10) * 100;
   
@@ -76,13 +81,13 @@ const MetricBar = ({
             <Ionicons name={icon as any} size={16} color={color} />
           </View>
           <View>
-            <Text style={styles.metricName}>{label}</Text>
-            <Text style={styles.metricDescription}>{description}</Text>
+            <Text style={[styles.metricName, { color: colors.text }]}>{label}</Text>
+            <Text style={[styles.metricDescription, { color: colors.textSecondary }]}>{description}</Text>
           </View>
         </View>
         <Text style={[styles.metricValue, { color }]}>{value.toFixed(1)}</Text>
       </View>
-      <View style={styles.barContainer}>
+      <View style={[styles.barContainer, { backgroundColor: isDark ? colors.surface : '#F0EBE3' }]}>
         <View style={[styles.barFill, { width: `${percentage}%`, backgroundColor: color }]} />
         <View style={styles.barMarkers}>
           {[0, 2, 4, 6, 8, 10].map(mark => (
@@ -94,36 +99,36 @@ const MetricBar = ({
   );
 };
 
-const HistoryItem = ({ record, isFirst }: { record: StateRecord; isFirst: boolean }) => {
+const HistoryItem = ({ record, isFirst, colors, isDark }: { record: StateRecord; isFirst: boolean; colors: any; isDark: boolean }) => {
   const [expanded, setExpanded] = useState(isFirst);
   
   return (
     <TouchableOpacity 
-      style={styles.historyItem} 
+      style={[styles.historyItem, { backgroundColor: colors.cardBackground }]} 
       onPress={() => setExpanded(!expanded)}
       activeOpacity={0.7}
     >
       <View style={styles.historyHeader}>
-        <Text style={styles.historyDate}>
+        <Text style={[styles.historyDate, { color: colors.text }]}>
           {format(new Date(record.created_at), 'd MMMM, HH:mm', { locale: ru })}
         </Text>
         <Ionicons 
           name={expanded ? 'chevron-up' : 'chevron-down'} 
           size={18} 
-          color="#A89F91" 
+          color={colors.textSecondary} 
         />
       </View>
       
       {expanded && (
-        <View style={styles.historyContent}>
+        <View style={[styles.historyContent, { borderTopColor: isDark ? colors.border : '#F0EBE3' }]}>
           {record.analysis && (
-            <Text style={styles.historyAnalysis}>{record.analysis}</Text>
+            <Text style={[styles.historyAnalysis, { color: colors.text }]}>{record.analysis}</Text>
           )}
           <View style={styles.historyMetrics}>
             {Object.entries(NEURO_LABELS).map(([key, info]) => (
-              <View key={key} style={styles.miniMetric}>
+              <View key={key} style={[styles.miniMetric, { backgroundColor: isDark ? colors.surface : '#F8F5F0' }]}>
                 <Ionicons name={info.icon as any} size={12} color={info.color} />
-                <Text style={styles.miniMetricValue}>
+                <Text style={[styles.miniMetricValue, { color: colors.text }]}>
                   {(record.metrics[key as keyof StateMetrics] || 5).toFixed(1)}
                 </Text>
               </View>
@@ -137,6 +142,7 @@ const HistoryItem = ({ record, isFirst }: { record: StateRecord; isFirst: boolea
 
 export default function StateScreen() {
   const { token } = useAuthContext();
+  const { colors, isDark } = useTheme();
   const [latestState, setLatestState] = useState<StateRecord | null>(null);
   const [history, setHistory] = useState<StateRecord[]>([]);
   const [loading, setLoading] = useState(true);
@@ -196,29 +202,29 @@ export default function StateScreen() {
 
   if (loading) {
     return (
-      <SafeAreaView style={styles.container}>
+      <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#8B7355" />
+          <ActivityIndicator size="large" color={colors.primary} />
         </View>
       </SafeAreaView>
     );
   }
 
   return (
-    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
+    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top', 'bottom']}>
       <ScrollView 
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#8B7355" />
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />
         }
       >
         <View style={styles.header}>
           <View style={styles.headerRow}>
-            <Text style={styles.headerTitle}>Состояние</Text>
-            <Text style={styles.greekAccent}>σῶμα</Text>
+            <Text style={[styles.headerTitle, { color: colors.text }]}>Состояние</Text>
+            <Text style={[styles.greekAccent, { color: colors.textSecondary }]}>σῶμα</Text>
           </View>
-          <Text style={styles.headerSubtitle}>
+          <Text style={[styles.headerSubtitle, { color: colors.textSecondary }]}>
             {latestState 
               ? `Обновлено ${format(new Date(latestState.created_at), 'd MMM, HH:mm', { locale: ru })}`
               : 'Нет данных'
@@ -228,31 +234,31 @@ export default function StateScreen() {
 
         {/* Кнопка анализа */}
         <TouchableOpacity 
-          style={styles.analyzeBtn} 
+          style={[styles.analyzeBtn, { backgroundColor: colors.cardBackground, borderColor: isDark ? colors.border : '#E8E1D5' }]} 
           onPress={analyzeFromNotes}
           disabled={analyzing}
           activeOpacity={0.7}
         >
           {analyzing ? (
-            <ActivityIndicator size="small" color="#8B7355" />
+            <ActivityIndicator size="small" color={colors.primary} />
           ) : (
             <>
-              <Ionicons name="sparkles" size={18} color="#8B7355" />
-              <Text style={styles.analyzeBtnText}>Проанализировать записи</Text>
+              <Ionicons name="sparkles" size={18} color={colors.primary} />
+              <Text style={[styles.analyzeBtnText, { color: colors.primary }]}>Проанализировать записи</Text>
             </>
           )}
         </TouchableOpacity>
 
         {latestState && latestState.analysis && (
-          <View style={styles.analysisCard}>
-            <Ionicons name="chatbubble-outline" size={18} color="#8B7355" />
-            <Text style={styles.analysisText}>{latestState.analysis}</Text>
+          <View style={[styles.analysisCard, { backgroundColor: isDark ? colors.surface : '#F8F5F0', borderColor: isDark ? colors.border : '#E8E1D5' }]}>
+            <Ionicons name="chatbubble-outline" size={18} color={colors.primary} />
+            <Text style={[styles.analysisText, { color: colors.text }]}>{latestState.analysis}</Text>
           </View>
         )}
 
         {/* Нейромедиаторы */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Нейромедиаторы</Text>
+          <Text style={[styles.sectionTitle, { color: colors.text }]}>Нейромедиаторы</Text>
           {Object.entries(NEURO_LABELS).map(([key, info]) => (
             <MetricBar
               key={key}
@@ -261,13 +267,15 @@ export default function StateScreen() {
               icon={info.icon}
               color={info.color}
               description={info.description}
+              isDark={isDark}
+              colors={colors}
             />
           ))}
         </View>
 
         {/* Когнитивные */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Когнитивные функции</Text>
+          <Text style={[styles.sectionTitle, { color: colors.text }]}>Когнитивные функции</Text>
           {Object.entries(COGNITIVE_LABELS).map(([key, info]) => (
             <MetricBar
               key={key}
@@ -276,6 +284,8 @@ export default function StateScreen() {
               icon={info.icon}
               color={info.color}
               description={info.description}
+              isDark={isDark}
+              colors={colors}
             />
           ))}
         </View>
@@ -283,9 +293,9 @@ export default function StateScreen() {
         {/* История */}
         {history.length > 0 && (
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>История</Text>
+            <Text style={[styles.sectionTitle, { color: colors.text }]}>История</Text>
             {history.map((record, index) => (
-              <HistoryItem key={record.id} record={record} isFirst={index === 0} />
+              <HistoryItem key={record.id} record={record} isFirst={index === 0} colors={colors} isDark={isDark} />
             ))}
           </View>
         )}
