@@ -12,7 +12,9 @@ import {
   NativeSyntheticEvent,
   TextInputContentSizeChangeEventData,
   Alert,
+  AppState,
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter, useLocalSearchParams } from 'expo-router';
@@ -23,6 +25,8 @@ import { notesRepository, useOffline } from './_offline';
 import { useTheme } from './theme';
 
 const API_URL = process.env.EXPO_PUBLIC_BACKEND_URL || 'http://localhost:8000';
+const DRAFT_KEY = 'nous_note_draft';
+const AUTOSAVE_INTERVAL = 1500; // Автосохранение каждые 1.5 секунды (быстрее для iOS)
 
 // Компонент линованной бумаги (только для светлой темы)
 const PaperLines = ({ lineCount = 30, isDark = false, showLines = true }: { lineCount?: number; isDark?: boolean; showLines?: boolean }) => {
@@ -72,19 +76,235 @@ export default function NoteEditScreen() {
 
   const noteId = params.id as string;
   const isNew = params.isNew === 'true';
+  const autosaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastSavedDraft = useRef({ title: '', content: '' });
+
+  // === АВТОСОХРАНЕНИЕ ЧЕРНОВИКА ===
+  
+  // Сохранение черновика в AsyncStorage
+  const saveDraft = useCallback(async (draftTitle: string, draftContent: string) => {
+    // Не сохраняем если ничего нет или не изменилось
+    if (!draftTitle && !draftContent) return;
+    if (draftTitle === lastSavedDraft.current.title && draftContent === lastSavedDraft.current.content) return;
+    
+    const draft = {
+      noteId: noteId || 'new',
+      title: draftTitle,
+      content: draftContent,
+      savedAt: Date.now(),
+    };
+    
+    try {
+      // Сохраняем в оба хранилища для надёжности
+      await AsyncStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
+      
+      // Дополнительно в localStorage (синхронно, выживает при краше iOS Safari)
+      if (Platform.OS === 'web' && typeof localStorage !== 'undefined') {
+        localStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
+      }
+      
+      lastSavedDraft.current = { title: draftTitle, content: draftContent };
+      console.log('[Draft] Saved at', new Date().toLocaleTimeString());
+    } catch (e) {
+      console.error('[Draft] Save error:', e);
+      // Fallback: хотя бы в localStorage
+      if (Platform.OS === 'web' && typeof localStorage !== 'undefined') {
+        try {
+          localStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
+        } catch {}
+      }
+    }
+  }, [noteId]);
+
+  // Загрузка черновика (проверяем оба хранилища)
+  const loadDraft = useCallback(async () => {
+    try {
+      let draftJson = await AsyncStorage.getItem(DRAFT_KEY);
+      
+      // Fallback: проверяем localStorage (может быть более свежий)
+      if (Platform.OS === 'web' && typeof localStorage !== 'undefined') {
+        const localDraft = localStorage.getItem(DRAFT_KEY);
+        if (localDraft) {
+          const localParsed = JSON.parse(localDraft);
+          const asyncParsed = draftJson ? JSON.parse(draftJson) : null;
+          
+          // Берём более свежий черновик
+          if (!asyncParsed || localParsed.savedAt > asyncParsed.savedAt) {
+            draftJson = localDraft;
+          }
+        }
+      }
+      
+      if (!draftJson) return null;
+      
+      const draft = JSON.parse(draftJson);
+      // Черновик актуален если моложе 24 часов и для той же заметки (или новой)
+      const isRecent = Date.now() - draft.savedAt < 24 * 60 * 60 * 1000;
+      const isSameNote = draft.noteId === (noteId || 'new') || draft.noteId.startsWith('new');
+      
+      if (isRecent && isSameNote && (draft.title || draft.content)) {
+        return draft;
+      }
+      return null;
+    } catch (e) {
+      // Последняя попытка - только localStorage
+      if (Platform.OS === 'web' && typeof localStorage !== 'undefined') {
+        try {
+          const localDraft = localStorage.getItem(DRAFT_KEY);
+          if (localDraft) {
+            return JSON.parse(localDraft);
+          }
+        } catch {}
+      }
+      return null;
+    }
+  }, [noteId]);
+
+  // Очистка черновика после успешного сохранения
+  const clearDraft = useCallback(async () => {
+    try {
+      await AsyncStorage.removeItem(DRAFT_KEY);
+      lastSavedDraft.current = { title: '', content: '' };
+    } catch (e) {}
+  }, []);
+
+  // Автосохранение при изменении текста
+  useEffect(() => {
+    if (autosaveTimer.current) {
+      clearTimeout(autosaveTimer.current);
+    }
+    
+    autosaveTimer.current = setTimeout(() => {
+      saveDraft(title, content);
+    }, AUTOSAVE_INTERVAL);
+
+    return () => {
+      if (autosaveTimer.current) {
+        clearTimeout(autosaveTimer.current);
+      }
+    };
+  }, [title, content, saveDraft]);
+
+  // Сохранение при сворачивании приложения
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (nextAppState) => {
+      if (nextAppState === 'background' || nextAppState === 'inactive') {
+        saveDraft(title, content);
+      }
+    });
+
+    return () => subscription.remove();
+  }, [title, content, saveDraft]);
+
+  // Сохранение при закрытии страницы (web) - максимальная защита для iOS Safari
+  useEffect(() => {
+    if (Platform.OS !== 'web') return;
+    
+    const saveImmediately = () => {
+      if (title || content) {
+        const draft = JSON.stringify({
+          noteId: noteId || 'new',
+          title,
+          content,
+          savedAt: Date.now(),
+        });
+        try {
+          localStorage.setItem(DRAFT_KEY, draft);
+          console.log('[Draft] Emergency save on visibility change');
+        } catch {}
+      }
+    };
+
+    // Множественные события для максимальной защиты на iOS
+    window.addEventListener('beforeunload', saveImmediately);
+    window.addEventListener('pagehide', saveImmediately); // iOS Safari
+    window.addEventListener('freeze', saveImmediately);   // Page Lifecycle API
+    
+    const handleVisibility = () => {
+      if (document.visibilityState === 'hidden') {
+        saveImmediately();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+
+    // Сохраняем при потере фокуса (переключение на другую вкладку/приложение)
+    window.addEventListener('blur', saveImmediately);
+
+    return () => {
+      window.removeEventListener('beforeunload', saveImmediately);
+      window.removeEventListener('pagehide', saveImmediately);
+      window.removeEventListener('freeze', saveImmediately);
+      document.removeEventListener('visibilitychange', handleVisibility);
+      window.removeEventListener('blur', saveImmediately);
+    };
+  }, [title, content, noteId]);
+
+  // === ЗАГРУЗКА ЗАМЕТКИ / ЧЕРНОВИКА ===
 
   // Загрузка заметки или очистка для новой
   useEffect(() => {
-    if (isNew) {
-      setTitle('');
-      setContent('');
-      setContentHeight(100);
-      lastHeight.current = 100;
-      initialContent.current = { title: '', content: '' };
-      setHasUnsavedChanges(false);
-    } else if (noteId) {
-      loadNote(noteId);
-    }
+    const initNote = async () => {
+      // Сначала проверяем есть ли несохранённый черновик
+      const draft = await loadDraft();
+      
+      if (isNew) {
+        if (draft) {
+          // Восстанавливаем черновик
+          setTitle(draft.title || '');
+          setContent(draft.content || '');
+          const lines = (draft.content || '').split('\n').length;
+          const height = Math.max(100, lines * 32);
+          setContentHeight(height);
+          lastHeight.current = height;
+          initialContent.current = { title: '', content: '' };
+          setHasUnsavedChanges(true);
+          
+          // Показываем уведомление о восстановлении
+          Alert.alert(
+            '✨ Черновик восстановлен',
+            'Найден несохранённый черновик. Продолжайте писать!',
+            [{ text: 'OK' }]
+          );
+        } else {
+          setTitle('');
+          setContent('');
+          setContentHeight(100);
+          lastHeight.current = 100;
+          initialContent.current = { title: '', content: '' };
+          setHasUnsavedChanges(false);
+        }
+      } else if (noteId) {
+        // Для существующей заметки - проверяем черновик
+        if (draft && (draft.title !== '' || draft.content !== '')) {
+          Alert.alert(
+            'Найден черновик',
+            'Восстановить несохранённые изменения?',
+            [
+              { 
+                text: 'Нет, загрузить оригинал', 
+                onPress: () => {
+                  clearDraft();
+                  loadNote(noteId);
+                }
+              },
+              { 
+                text: 'Да, восстановить', 
+                onPress: () => {
+                  setTitle(draft.title || '');
+                  setContent(draft.content || '');
+                  initialContent.current = { title: '', content: '' };
+                  setHasUnsavedChanges(true);
+                }
+              },
+            ]
+          );
+        } else {
+          loadNote(noteId);
+        }
+      }
+    };
+    
+    initNote();
   }, [noteId, isNew]);
 
   // Отслеживание несохранённых изменений
@@ -102,11 +322,19 @@ export default function NoteEditScreen() {
         'Хотите сохранить изменения?',
         [
           { text: 'Отмена', style: 'cancel' },
-          { text: 'Не сохранять', style: 'destructive', onPress: () => router.back() },
+          { 
+            text: 'Не сохранять', 
+            style: 'destructive', 
+            onPress: async () => {
+              await clearDraft();
+              router.back();
+            }
+          },
           { text: 'Сохранить', onPress: saveNote },
         ]
       );
     } else {
+      clearDraft();
       router.back();
     }
   };
@@ -174,6 +402,7 @@ export default function NoteEditScreen() {
 
   const saveNote = async () => {
     if (!title.trim() && !content.trim()) {
+      await clearDraft(); // Очищаем пустой черновик
       router.back();
       return;
     }
@@ -186,6 +415,7 @@ export default function NoteEditScreen() {
       const result = await notesRepository.save(noteIdToSave, title, content);
       
       if (result.success) {
+        await clearDraft(); // Очищаем черновик после успешного сохранения
         router.back();
       } else {
         Alert.alert('Ошибка', result.error || 'Не удалось сохранить заметку');
@@ -265,16 +495,20 @@ export default function NoteEditScreen() {
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         style={styles.content}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 44 : 0}
       >
         <ScrollView 
           style={[
             styles.paperContainer, 
             { backgroundColor: isDark ? '#1a1a1a' : colors.background }
           ]}
-          contentContainerStyle={styles.paperContentContainer}
+          contentContainerStyle={[
+            styles.paperContentContainer,
+            { paddingBottom: 120 } // Отступ снизу чтобы текст не уходил под toolbar
+          ]}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="interactive"
         >
           {/* Эффект текстуры бумаги - только для светлой темы */}
           {!isDark && (

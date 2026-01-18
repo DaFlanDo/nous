@@ -75,27 +75,21 @@ export default function Root({ children }: PropsWithChildren) {
                     .then(function(registration) {
                       console.log('[SW] Registered:', registration.scope);
                       
-                      // Проверяем обновления каждые 5 минут (не сразу!)
-                      setInterval(function() {
-                        registration.update();
-                      }, 300000);
+                      // НЕ проверяем обновления автоматически - только при ручном обновлении страницы
+                      // Это предотвращает внезапные перезагрузки
                       
-                      // Обработка обновлений
+                      // Обработка обновлений (только когда пользователь сам обновит страницу)
                       registration.addEventListener('updatefound', function() {
                         var newWorker = registration.installing;
-                        console.log('[SW] Update found, installing...');
+                        console.log('[SW] Update found, installing in background...');
                         
                         newWorker.addEventListener('statechange', function() {
                           if (newWorker.state === 'installed') {
-                            // Только показываем уведомление если уже был контроллер
-                            // (не первая установка)
                             if (navigator.serviceWorker.controller) {
-                              console.log('[SW] New version ready');
-                              showUpdateNotification(function() {
-                                newWorker.postMessage({ type: 'SKIP_WAITING' });
-                              });
-                            } else {
-                              console.log('[SW] First install, no reload needed');
+                              // Новая версия готова - показываем ненавязчивое уведомление
+                              console.log('[SW] New version ready, will activate on next visit');
+                              // НЕ показываем popup, не прерываем работу
+                              // Новая версия активируется при следующем открытии приложения
                             }
                           }
                         });
