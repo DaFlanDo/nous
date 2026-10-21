@@ -19,8 +19,8 @@ class Settings(BaseSettings):
     # OpenAI / LLM API
     openai_api_key: str = ""
     openai_base_url: str = "https://api.openai.com/v1"
-    openai_model: str = "gpt-4o"
-    openai_model_cheap: str = "gpt-4o-mini"  # Дешёвая модель для саммари
+    openai_model: str = "claude-sonnet-4-5-20250929"
+    openai_model_cheap: str = "gpt-4o-mini"  # Дешёвая модель для саммари (пока не используется)
     
     # Chat optimization
     chat_history_limit: int = 10  # Максимум сообщений в контексте

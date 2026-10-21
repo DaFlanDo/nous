@@ -14,6 +14,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { format } from 'date-fns';
 import { ru } from 'date-fns/locale';
+import { useFocusEffect } from 'expo-router';
 import { useAuthContext } from './_layout';
 import { useChecklists, useOffline, ChecklistTemplate } from './_offline';
 import { useTheme } from './theme';
@@ -77,6 +78,13 @@ export default function ChecklistsScreen() {
   useEffect(() => {
     fetchTemplates();
   }, [fetchTemplates]);
+
+  // Обновляем чеклист при возврате на экран
+  useFocusEffect(
+    useCallback(() => {
+      refreshChecklist();
+    }, [refreshChecklist])
+  );
 
   const addItem = async () => {
     if (!newItemText.trim()) return;

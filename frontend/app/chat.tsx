@@ -12,6 +12,7 @@ import {
   ActivityIndicator,
   Modal,
   Animated,
+  ScrollView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -331,9 +332,16 @@ export default function ChatScreen() {
           setHistorySummary(data.history_summary);
         }
         
-        // Если ИИ предлагает чеклист
-        if (data.suggest_checklist) {
-          fetchChecklistSuggestions();
+        // Если ИИ предлагает чеклист - сразу показываем (items уже в ответе!)
+        if (data.suggest_checklist && data.checklist_items?.length > 0) {
+          setChecklistSuggestion({ items: data.checklist_items });
+          setShowChecklistSuggestion(true);
+          Animated.spring(suggestionAnim, {
+            toValue: 1,
+            useNativeDriver: true,
+            tension: 50,
+            friction: 7,
+          }).start();
         }
         
         if (data.state_updated) {
@@ -615,61 +623,6 @@ export default function ChatScreen() {
           />
         )}
 
-        {/* Предложение чеклиста */}
-        {showChecklistSuggestion && checklistSuggestion && (<Animated.View 
-            style={[
-              styles.checklistSuggestion,
-              { backgroundColor: colors.cardBackground, borderColor: colors.border },
-              {
-                opacity: suggestionAnim,
-                transform: [{
-                  translateY: suggestionAnim.interpolate({
-                    inputRange: [0, 1],
-                    outputRange: [50, 0],
-                  }),
-                }],
-              },
-            ]}
-          >
-            <View style={styles.suggestionHeader}>
-              <View style={[styles.suggestionIcon, { backgroundColor: isDark ? colors.surface : '#F0EBE3' }]}>
-                <Ionicons name="checkbox-outline" size={20} color={colors.primary} />
-              </View>
-              <Text style={[styles.suggestionTitle, { color: colors.text }]}>Добавить в чеклист?</Text>
-              <TouchableOpacity onPress={dismissChecklistSuggestion} style={styles.dismissBtn}>
-                <Ionicons name="close" size={20} color={colors.textSecondary} />
-              </TouchableOpacity>
-            </View>
-            
-            <Text style={[styles.suggestionReasoning, { color: colors.textSecondary }]}>{checklistSuggestion.reasoning}</Text>
-            
-            <View style={styles.suggestionItems}>
-              {checklistSuggestion.items.map((item, index) => (
-                <View key={index} style={styles.suggestionItemRow}>
-                  <View style={[styles.suggestionCheckbox, { borderColor: colors.border }]} />
-                  <Text style={[styles.suggestionItemText, { color: colors.text }]}>{item}</Text>
-                </View>
-              ))}
-            </View>
-            
-            <View style={styles.suggestionActions}>
-              <TouchableOpacity 
-                style={[styles.declineBtn, { borderColor: colors.border }]} 
-                onPress={dismissChecklistSuggestion}
-              >
-                <Text style={[styles.declineBtnText, { color: colors.textSecondary }]}>Не сейчас</Text>
-              </TouchableOpacity>
-              <TouchableOpacity 
-                style={[styles.acceptBtn, { backgroundColor: colors.primary }]} 
-                onPress={acceptChecklist}
-              >
-                <Ionicons name="checkmark" size={18} color="#FFFFFF" />
-                <Text style={styles.acceptBtnText}>Добавить</Text>
-              </TouchableOpacity>
-            </View>
-          </Animated.View>
-        )}
-
         {loading && (
           <View style={[styles.typingIndicator, { backgroundColor: colors.cardBackground }]}>
             <View style={styles.typingDots}>
@@ -712,6 +665,98 @@ export default function ChatScreen() {
           </TouchableOpacity>
         </View>
       </View>
+
+      {/* Модальное окно предложения чеклиста - Apple Style Sheet */}
+      <Modal 
+        visible={showChecklistSuggestion && !!checklistSuggestion} 
+        animationType="slide" 
+        transparent={true}
+        onRequestClose={dismissChecklistSuggestion}
+      >
+        <View style={styles.checklistModalOverlay}>
+          <TouchableOpacity 
+            style={styles.checklistModalBackdrop} 
+            activeOpacity={1} 
+            onPress={dismissChecklistSuggestion}
+          />
+          <Animated.View 
+            style={[
+              styles.checklistModalSheet,
+              { backgroundColor: isDark ? '#1c1c1e' : '#ffffff' }
+            ]}
+          >
+            {/* Ручка для свайпа */}
+            <View style={styles.checklistModalHandle}>
+              <View style={[styles.handleBar, { backgroundColor: isDark ? '#3a3a3c' : '#d1d1d6' }]} />
+            </View>
+
+            {/* Заголовок */}
+            <View style={styles.checklistModalHeader}>
+              <View style={[styles.checklistModalIcon, { backgroundColor: isDark ? '#2c2c2e' : '#f2f2f7' }]}>
+                <Ionicons name="list" size={24} color={colors.primary} />
+              </View>
+              <Text style={[styles.checklistModalTitle, { color: colors.text }]}>
+                Добавить задачи?
+              </Text>
+              <TouchableOpacity 
+                onPress={dismissChecklistSuggestion} 
+                style={[styles.checklistModalCloseBtn, { backgroundColor: isDark ? '#2c2c2e' : '#f2f2f7' }]}
+              >
+                <Ionicons name="close" size={18} color={colors.textSecondary} />
+              </TouchableOpacity>
+            </View>
+
+            {/* Список задач */}
+            <ScrollView style={styles.checklistModalContent} showsVerticalScrollIndicator={false}>
+              {checklistSuggestion?.items.map((item, index) => (
+                <View 
+                  key={index} 
+                  style={[
+                    styles.checklistModalItem,
+                    { backgroundColor: isDark ? '#2c2c2e' : '#f2f2f7' }
+                  ]}
+                >
+                  <View style={[styles.checklistModalCheckbox, { borderColor: colors.primary }]}>
+                    <Ionicons name="checkmark" size={12} color={colors.primary} />
+                  </View>
+                  <Text style={[styles.checklistModalItemText, { color: colors.text }]}>
+                    {item}
+                  </Text>
+                </View>
+              ))}
+            </ScrollView>
+
+            {/* Кнопки действий */}
+            <View style={styles.checklistModalActions}>
+              <TouchableOpacity 
+                style={[
+                  styles.checklistModalBtn,
+                  styles.checklistModalBtnSecondary,
+                  { backgroundColor: isDark ? '#2c2c2e' : '#f2f2f7' }
+                ]} 
+                onPress={dismissChecklistSuggestion}
+              >
+                <Text style={[styles.checklistModalBtnText, { color: colors.textSecondary }]}>
+                  Не сейчас
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity 
+                style={[
+                  styles.checklistModalBtn,
+                  styles.checklistModalBtnPrimary,
+                  { backgroundColor: colors.primary }
+                ]} 
+                onPress={acceptChecklist}
+              >
+                <Ionicons name="add" size={20} color="#FFFFFF" />
+                <Text style={[styles.checklistModalBtnText, { color: '#FFFFFF' }]}>
+                  Добавить
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </Animated.View>
+        </View>
+      </Modal>
 
       {/* Модальное окно истории сеансов */}
       <Modal visible={showSessionsModal} animationType="slide" transparent={false}>
@@ -880,7 +925,7 @@ const styles = StyleSheet.create({
   messagesList: {
     paddingHorizontal: 20,
     paddingVertical: 20,
-    paddingBottom: Platform.OS === 'web' ? 160 : Platform.OS === 'ios' ? 180 : 150,
+    paddingBottom: Platform.OS === 'web' ? 200 : Platform.OS === 'ios' ? 220 : 180,
   },
   messageContainer: {
     marginBottom: 16,
@@ -929,98 +974,110 @@ const styles = StyleSheet.create({
   userMessageText: {
     color: '#FFFFFF',
   },
-  // Предложение чеклиста
-  checklistSuggestion: {
-    backgroundColor: '#FFFFFF',
-    marginHorizontal: 20,
-    marginBottom: 12,
-    borderRadius: 20,
-    padding: 20,
-    shadowColor: '#8B7355',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.12,
-    shadowRadius: 16,
-    elevation: 4,
-    borderWidth: 1,
-    borderColor: '#E8E2D9',
+  // Apple Style Checklist Modal
+  checklistModalOverlay: {
+    flex: 1,
+    justifyContent: 'flex-end',
   },
-  suggestionHeader: {
+  checklistModalBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0, 0, 0, 0.4)',
+  },
+  checklistModalSheet: {
+    backgroundColor: '#ffffff',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    paddingBottom: Platform.OS === 'ios' ? 34 : 24,
+    maxHeight: '70%',
+  },
+  checklistModalHandle: {
+    alignItems: 'center',
+    paddingVertical: 12,
+  },
+  handleBar: {
+    width: 36,
+    height: 5,
+    borderRadius: 3,
+    backgroundColor: '#d1d1d6',
+  },
+  checklistModalHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 12,
+    paddingHorizontal: 20,
+    paddingBottom: 16,
   },
-  suggestionIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: '#F0EBE3',
+  checklistModalIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    backgroundColor: '#f2f2f7',
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 12,
+    marginRight: 14,
   },
-  suggestionTitle: {
+  checklistModalTitle: {
+    flex: 1,
+    fontSize: 20,
+    fontWeight: '600',
+    letterSpacing: -0.4,
+  },
+  checklistModalCloseBtn: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: '#f2f2f7',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  checklistModalContent: {
+    paddingHorizontal: 20,
+    maxHeight: 300,
+  },
+  checklistModalItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#f2f2f7',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 8,
+  },
+  checklistModalCheckbox: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    borderWidth: 2,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 14,
+  },
+  checklistModalItemText: {
     flex: 1,
     fontSize: 16,
-    fontWeight: '600',
-    color: '#5D4E3A',
+    lineHeight: 22,
   },
-  dismissBtn: {
-    padding: 4,
-  },
-  suggestionReasoning: {
-    fontSize: 14,
-    color: '#8B7355',
-    lineHeight: 20,
-    marginBottom: 16,
-  },
-  suggestionItems: {
-    marginBottom: 16,
-  },
-  suggestionItemRow: {
+  checklistModalActions: {
     flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 8,
-  },
-  suggestionCheckbox: {
-    width: 18,
-    height: 18,
-    borderRadius: 9,
-    borderWidth: 2,
-    borderColor: '#D4CCC0',
-    marginRight: 12,
-  },
-  suggestionItemText: {
-    flex: 1,
-    fontSize: 14,
-    color: '#5D4E3A',
-  },
-  suggestionActions: {
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
+    paddingHorizontal: 20,
+    paddingTop: 20,
     gap: 12,
   },
-  declineBtn: {
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderRadius: 12,
-  },
-  declineBtnText: {
-    color: '#A89F91',
-    fontSize: 14,
-    fontWeight: '500',
-  },
-  acceptBtn: {
+  checklistModalBtn: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#8B7355',
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderRadius: 12,
-    gap: 6,
+    justifyContent: 'center',
+    paddingVertical: 16,
+    borderRadius: 14,
+    gap: 8,
   },
-  acceptBtnText: {
-    color: '#FFFFFF',
-    fontSize: 14,
+  checklistModalBtnSecondary: {
+    backgroundColor: '#f2f2f7',
+  },
+  checklistModalBtnPrimary: {
+    backgroundColor: '#8B7355',
+  },
+  checklistModalBtnText: {
+    fontSize: 17,
     fontWeight: '600',
   },
   typingIndicator: {

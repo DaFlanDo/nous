@@ -48,10 +48,12 @@ export const authStorage = {
     try {
       // Сначала пробуем AsyncStorage
       let token = await AsyncStorage.getItem(AUTH_TOKEN_KEY);
+      console.log('[Auth] AsyncStorage token:', !!token);
       
       // Fallback на localStorage для iOS PWA
       if (!token && Platform.OS === 'web' && typeof localStorage !== 'undefined') {
         token = localStorage.getItem(AUTH_TOKEN_KEY);
+        console.log('[Auth] localStorage fallback token:', !!token);
         // Если нашли в localStorage, восстанавливаем в AsyncStorage
         if (token) {
           await AsyncStorage.setItem(AUTH_TOKEN_KEY, token);
@@ -59,7 +61,8 @@ export const authStorage = {
       }
       
       return token;
-    } catch {
+    } catch (e) {
+      console.log('[Auth] getToken error:', e);
       // Последняя попытка - только localStorage
       if (Platform.OS === 'web' && typeof localStorage !== 'undefined') {
         return localStorage.getItem(AUTH_TOKEN_KEY);
@@ -99,6 +102,7 @@ export const authStorage = {
     if (Platform.OS === 'web' && typeof localStorage !== 'undefined') {
       localStorage.setItem(AUTH_TOKEN_KEY, token);
       localStorage.setItem(USER_KEY, JSON.stringify(user));
+      console.log('[Auth] Saved to localStorage:', !!token);
     }
   },
 

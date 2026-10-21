@@ -1,10 +1,11 @@
 """
-Chat Routes
+Chat Routes with Notes Context
 """
-from fastapi import APIRouter, HTTPException, Depends
-from typing import List
-from datetime import datetime
+from fastapi import APIRouter, HTTPException, Depends, Query
+from typing import List, Optional
+from datetime import datetime, timedelta
 import logging
+import re
 
 from ..models import (
     User, ChatSession, ChatSessionCreate, ChatRequest,
@@ -23,19 +24,120 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/chat", tags=["Chat"])
 
 
+async def get_user_notes_context(
+    user_id: str, 
+    enc, 
+    limit: int = 5,
+    date_filter: Optional[str] = None,
+    search_query: Optional[str] = None
+) -> List[dict]:
+    """
+    Получить записи пользователя для контекста AI
+    
+    Args:
+        user_id: ID пользователя
+        enc: Encryption service
+        limit: Количество записей
+        date_filter: Дата в формате YYYY-MM-DD для фильтрации
+        search_query: Поисковый запрос
+    """
+    notes_collection = get_notes_collection()
+    
+    query = {"user_id": user_id}
+    
+    # Фильтр по дате
+    if date_filter:
+        try:
+            target_date = datetime.strptime(date_filter, "%Y-%m-%d")
+            start_of_day = target_date.replace(hour=0, minute=0, second=0)
+            end_of_day = target_date.replace(hour=23, minute=59, second=59)
+            query["created_at"] = {"$gte": start_of_day, "$lte": end_of_day}
+        except ValueError:
+            logger.warning(f"Invalid date format: {date_filter}")
+    
+    cursor = notes_collection.find(query).sort("created_at", -1).limit(limit)
+    notes = await cursor.to_list(limit)
+    
+    decrypted_notes = []
+    for note in notes:
+        try:
+            decrypted = enc.decrypt_note(note)
+            
+            # Если есть поисковый запрос - фильтруем
+            if search_query:
+                search_lower = search_query.lower()
+                title = decrypted.get('title', '').lower()
+                content = decrypted.get('content', '').lower()
+                if search_lower not in title and search_lower not in content:
+                    continue
+            
+            decrypted_notes.append(decrypted)
+        except Exception as e:
+            logger.error(f"Error decrypting note: {e}")
+    
+    return decrypted_notes
+
+
 @router.post("")
 async def chat_with_ai(request: ChatRequest, user: User = Depends(require_auth)):
-    """Отправить сообщение AI с оптимизацией истории"""
+    """Отправить сообщение AI с контекстом записей"""
     try:
         ai = get_ai_service()
         enc = get_encryption()
         
-        # Get AI response with optimized history
+        # Получаем контекст записей пользователя
+        notes_context = await get_user_notes_context(
+            user_id=user.id,
+            enc=enc,
+            limit=5  # Последние 5 записей по умолчанию
+        )
+        
+        # Get AI response with optimized history and notes context
         result = await ai.get_reflection_response(
             message=request.message,
             history=request.history,
-            history_summary=request.history_summary
+            history_summary=request.history_summary,
+            notes_context=notes_context
         )
+        
+        # Если AI запросил дополнительные записи - получаем их
+        additional_context = None
+        if result.get("need_note_date") or result.get("search_notes_query"):
+            additional_notes = await get_user_notes_context(
+                user_id=user.id,
+                enc=enc,
+                limit=3,
+                date_filter=result.get("need_note_date"),
+                search_query=result.get("search_notes_query")
+            )
+            
+            if additional_notes:
+                # Делаем второй запрос с дополнительным контекстом
+                logger.info(f"AI requested additional notes, found {len(additional_notes)}")
+                
+                # Объединяем контексты
+                all_notes = notes_context + additional_notes
+                # Убираем дубликаты по id
+                seen_ids = set()
+                unique_notes = []
+                for note in all_notes:
+                    note_id = note.get('id')
+                    if note_id not in seen_ids:
+                        seen_ids.add(note_id)
+                        unique_notes.append(note)
+                
+                # Повторный запрос с расширенным контекстом
+                result = await ai.get_reflection_response(
+                    message=request.message,
+                    history=request.history,
+                    history_summary=request.history_summary,
+                    notes_context=unique_notes
+                )
+                additional_context = {
+                    "notes_found": len(additional_notes),
+                    "date_searched": result.get("need_note_date"),
+                    "query_searched": result.get("search_notes_query")
+                }
         
         # Save messages to session if session_id provided
         if request.session_id:
@@ -91,11 +193,43 @@ async def chat_with_ai(request: ChatRequest, user: User = Depends(require_auth))
             except Exception as e:
                 logger.error(f"State analysis error: {str(e)}")
         
+        # Добавляем инфо о контексте
+        result["notes_in_context"] = len(notes_context)
+        if additional_context:
+            result["additional_context"] = additional_context
+        
         return result
         
     except Exception as e:
         logger.error(f"Chat error: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/notes-context")
+async def get_notes_for_context(
+    user: User = Depends(require_auth),
+    limit: int = Query(default=5, le=20),
+    date: Optional[str] = Query(default=None, description="Date in YYYY-MM-DD format"),
+    search: Optional[str] = Query(default=None, description="Search query")
+):
+    """Получить записи для контекста (для отладки или явного запроса)"""
+    enc = get_encryption()
+    notes = await get_user_notes_context(
+        user_id=user.id,
+        enc=enc,
+        limit=limit,
+        date_filter=date,
+        search_query=search
+    )
+    
+    return {
+        "notes": notes,
+        "count": len(notes),
+        "filters": {
+            "date": date,
+            "search": search
+        }
+    }
 
 
 @router.post("/sessions", response_model=ChatSession)

@@ -172,7 +172,7 @@ export default function StateScreen() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, []);
+  }, [token]);
 
   useEffect(() => {
     fetchData();

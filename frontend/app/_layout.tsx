@@ -28,10 +28,18 @@ function AppTabs() {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
   
-  // Компактный tab bar
-  // Для PWA не добавляем лишний padding - home indicator уже есть
+  // Для iOS PWA нужен отступ для home indicator
+  // На web (PWA) insets.bottom может быть 0, но на iOS Safari standalone режим
+  // нужен фиксированный отступ
   const isWeb = Platform.OS === 'web';
-  const bottomPadding = isWeb ? 0 : Math.min(insets.bottom, 16);
+  const isPWA = isWeb && typeof window !== 'undefined' && 
+    (window.matchMedia?.('(display-mode: standalone)')?.matches || 
+     (window.navigator as any)?.standalone);
+  
+  // Для iOS PWA добавляем отступ для home indicator (34px на iPhone X+)
+  const bottomPadding = isWeb 
+    ? (isPWA ? 20 : 8)  // PWA: больший отступ, обычный web: небольшой
+    : Math.min(insets.bottom, 16);
   const tabBarHeight = 52 + bottomPadding;
   
   return (
