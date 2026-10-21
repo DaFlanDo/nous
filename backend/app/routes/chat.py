@@ -19,6 +19,7 @@ from ..database import (
 from ..services.auth import require_auth
 from ..services.encryption import get_encryption
 from ..services.ai import get_ai_service
+from ..services.rate_limit import ai_rate_limit
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/chat", tags=["Chat"])
@@ -88,7 +89,7 @@ async def get_user_notes_context(
 
 
 @router.post("")
-async def chat_with_ai(request: ChatRequest, user: User = Depends(require_auth)):
+async def chat_with_ai(request: ChatRequest, user: User = Depends(ai_rate_limit)):
     """Отправить сообщение AI с контекстом записей"""
     if request.session_id:
         own_session = await get_chat_sessions_collection().find_one(
@@ -329,7 +330,7 @@ async def delete_chat_session(session_id: str, user: User = Depends(require_auth
 
 
 @router.post("/sessions/{session_id}/summary")
-async def create_summary_from_session(session_id: str, user: User = Depends(require_auth)):
+async def create_summary_from_session(session_id: str, user: User = Depends(ai_rate_limit)):
     """Создать выжимку (записку) на основе диалога"""
     sessions = get_chat_sessions_collection()
     session = await sessions.find_one({"id": session_id, "user_id": user.id})
@@ -374,7 +375,7 @@ async def create_summary_from_session(session_id: str, user: User = Depends(requ
 
 
 @router.post("/suggest-tasks")
-async def suggest_tasks(request: ChatRequest, user: User = Depends(require_auth)):
+async def suggest_tasks(request: ChatRequest, user: User = Depends(ai_rate_limit)):
     """Получить предложения задач на основе диалога"""
     try:
         ai = get_ai_service()

@@ -10,6 +10,7 @@ from ..database import get_states_collection, get_notes_collection
 from ..services.auth import require_auth
 from ..services.encryption import get_encryption
 from ..services.ai import get_ai_service
+from ..services.rate_limit import ai_rate_limit
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/states", tags=["State"])
@@ -43,7 +44,7 @@ async def get_latest_state(user: User = Depends(require_auth)):
 
 
 @router.post("/analyze", response_model=StateRecord)
-async def analyze_state_from_notes(user: User = Depends(require_auth)):
+async def analyze_state_from_notes(user: User = Depends(ai_rate_limit)):
     """Проанализировать состояние на основе последних записей"""
     logger.info("analyze_state_from_notes called")
     

@@ -1,11 +1,5 @@
 """Шифрование полей: без базы и сети."""
 import logging
-import os
-import sys
-
-os.environ.setdefault("JWT_SECRET", "test-secret")
-os.environ.setdefault("ENCRYPTION_KEY", "test-encryption-key")
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "backend"))
 
 from app.services.encryption import EncryptionService
 

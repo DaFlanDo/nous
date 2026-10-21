@@ -54,6 +54,10 @@ def validate_email(email: str) -> bool:
 
 async def verify_google_token(id_token: str) -> dict:
     """Verify Google ID token"""
+    # Без client_id нельзя проверить, что токен выдан именно нашему приложению:
+    # подошёл бы ID-токен пользователя из любого чужого приложения с Google-входом
+    if not settings.google_client_id:
+        raise HTTPException(status_code=503, detail="Вход через Google не настроен")
     try:
         async with httpx.AsyncClient() as client:
             response = await client.get(
@@ -68,8 +72,10 @@ async def verify_google_token(id_token: str) -> dict:
             logger.debug(f"Expected GOOGLE_CLIENT_ID: {settings.google_client_id}")
             
             # Verify audience
-            if settings.google_client_id and token_info.get("aud") != settings.google_client_id:
+            if token_info.get("aud") != settings.google_client_id:
                 raise HTTPException(status_code=401, detail="Token was not issued for this app")
+            if str(token_info.get("email_verified")).lower() != "true":
+                raise HTTPException(status_code=401, detail="Google email is not verified")
             
             return token_info
     except httpx.RequestError as e:

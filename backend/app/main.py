@@ -64,9 +64,11 @@ app = FastAPI(
 )
 
 # Configure CORS
+# Авторизация — Bearer-токен в заголовке, cookie не используются,
+# поэтому credentials не нужны (и с "*" браузеры их всё равно не пускают)
 app.add_middleware(
     CORSMiddleware,
-    allow_credentials=True,
+    allow_credentials=False,
     allow_origins=settings.allowed_origins.split(",") if settings.allowed_origins != "*" else ["*"],
     allow_methods=["*"],
     allow_headers=["*"],

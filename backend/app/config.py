@@ -26,7 +26,8 @@ class Settings(BaseSettings):
     # Chat optimization
     chat_history_limit: int = 10  # Максимум сообщений в контексте
     chat_summarize_after: int = 6  # После скольких сообщений делать саммари
-    chat_use_cheap_model_for_summary: bool = True  # Использовать дешёвую модель для саммаризации
+    chat_use_cheap_model_for_summary: bool = True
+    ai_requests_per_hour: int = 60  # на пользователя, см. services/rate_limit.py  # Использовать дешёвую модель для саммаризации
     
     # JWT
     jwt_secret: str = ""
