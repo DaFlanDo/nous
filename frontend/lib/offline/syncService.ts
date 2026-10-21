@@ -12,6 +12,8 @@ import {
   Note,
   DEFAULT_OFFLINE_CONFIG,
 } from './types';
+// Только тип: checklistsRepository сам импортирует syncService
+import type { DailyChecklist } from './checklistsRepository';
 
 const API_URL = process.env.EXPO_PUBLIC_BACKEND_URL || 'http://localhost:8000';
 
@@ -68,6 +70,34 @@ class SyncService {
     if (this.isOnline()) {
       this.sync();
     }
+  }
+
+  /**
+   * Дописать изменения в ещё не отправленное создание сущности.
+   * Сущность с локальным id на сервере ещё не существует — отдельный
+   * update по такому id сервер не найдёт.
+   */
+  async mergeIntoPendingCreate(entityType: EntityType, entityId: string, changes: object): Promise<boolean> {
+    const queue = await this.getPendingOperations();
+    const create = queue.find(
+      (i) => i.entityType === entityType && i.entityId === entityId && i.operation === 'create'
+    );
+    if (!create) return false;
+    await database.put(STORE_NAMES.SYNC_QUEUE, { ...create, payload: { ...create.payload, ...changes } });
+    return true;
+  }
+
+  /**
+   * Убрать из очереди все операции над сущностью (удалена до синхронизации)
+   */
+  async dropPending(entityType: EntityType, entityId: string): Promise<void> {
+    const queue = await this.getPendingOperations();
+    for (const item of queue) {
+      if (item.entityType === entityType && item.entityId === entityId) {
+        await database.delete(STORE_NAMES.SYNC_QUEUE, item.id);
+      }
+    }
+    this.notifyListeners();
   }
 
   /**
@@ -307,10 +337,22 @@ class SyncService {
   }
 
   /**
-   * Синхронизация чеклиста (заглушка)
+   * Синхронизация чеклиста: в payload всегда полное состояние дня,
+   * а POST /api/checklists — upsert по дате, поэтому повтор безопасен
    */
   private async syncChecklist(item: SyncQueueItem, headers: HeadersInit): Promise<OperationResult> {
-    // TODO: Реализовать синхронизацию чеклистов
+    const response = await fetch(`${API_URL}/api/checklists`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(item.payload),
+    });
+    if (!response.ok) {
+      return { success: false, error: `HTTP ${response.status}` };
+    }
+    const checklist = await database.get<DailyChecklist>(STORE_NAMES.CHECKLISTS, item.entityId);
+    if (checklist) {
+      await database.put(STORE_NAMES.CHECKLISTS, { ...checklist, _syncStatus: 'synced' as SyncStatus });
+    }
     return { success: true };
   }
 
@@ -318,8 +360,9 @@ class SyncService {
    * Синхронизация чат-сессии (заглушка)
    */
   private async syncChatSession(item: SyncQueueItem, headers: HeadersInit): Promise<OperationResult> {
-    // TODO: Реализовать синхронизацию чат-сессий
-    return { success: true };
+    // Чат работает только онлайн и в очередь не попадает. Если попадёт —
+    // пусть операция останется ошибкой, а не будет молча «синхронизирована»
+    return { success: false, error: 'Chat sessions are not synced offline' };
   }
 
   /**

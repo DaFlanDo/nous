@@ -163,11 +163,12 @@ class NotesRepository {
 
       await database.put(STORE_NAMES.NOTES, updatedNote);
 
-      // Если заметка уже синхронизирована (имеет серверный ID)
-      if (!id.startsWith('local_')) {
+      if (id.startsWith('local_')) {
+        // Заметка ещё не создана на сервере — правим ожидающее создание
+        await syncService.mergeIntoPendingCreate('note', id, updates);
+      } else {
         await syncService.enqueue('note', id, 'update', updates);
       }
-      // Если локальная - она уже в очереди на создание
 
       return { success: true, data: updatedNote };
     } catch (error) {
@@ -182,8 +183,11 @@ class NotesRepository {
     try {
       await database.delete(STORE_NAMES.NOTES, id);
 
-      // Если это была синхронизированная заметка - добавляем удаление в очередь
-      if (!id.startsWith('local_')) {
+      if (id.startsWith('local_')) {
+        // Удалена до отправки — создание из очереди тоже убираем,
+        // иначе заметка «воскреснет» после синхронизации
+        await syncService.dropPending('note', id);
+      } else {
         await syncService.enqueue('note', id, 'delete', { id });
       }
 
