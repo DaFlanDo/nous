@@ -4,7 +4,6 @@ State Routes (Neurotransmitters and Cognitive Metrics)
 from fastapi import APIRouter, HTTPException, Depends
 from typing import List, Optional
 import logging
-import traceback
 
 from ..models import User, StateRecord, StateMetrics
 from ..database import get_states_collection, get_notes_collection
@@ -89,7 +88,6 @@ async def analyze_state_from_notes(user: User = Depends(require_auth)):
         
     except HTTPException:
         raise
-    except Exception as e:
-        logger.error(f"Analyze state error: {type(e).__name__} - {str(e)}")
-        logger.error(f"Traceback: {traceback.format_exc()}")
-        raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {str(e)}")
+    except Exception:
+        logger.exception("Analyze state error")
+        raise HTTPException(status_code=500, detail="Не удалось проанализировать состояние. Попробуйте ещё раз.")

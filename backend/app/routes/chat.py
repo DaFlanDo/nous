@@ -24,6 +24,10 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/chat", tags=["Chat"])
 
 
+# Сколько последних заметок просматривать при поиске ИИ по тексту
+SEARCH_SCAN_LIMIT = 500
+
+
 async def get_user_notes_context(
     user_id: str, 
     enc, 
@@ -55,8 +59,11 @@ async def get_user_notes_context(
         except ValueError:
             logger.warning(f"Invalid date format: {date_filter}")
     
-    cursor = notes_collection.find(query).sort("created_at", -1).limit(limit)
-    notes = await cursor.to_list(limit)
+    # Заметки зашифрованы, искать по тексту можно только после расшифровки —
+    # поэтому при поиске просматриваем больше записей и берём limit совпадений
+    scan_limit = SEARCH_SCAN_LIMIT if search_query else limit
+    cursor = notes_collection.find(query).sort("created_at", -1).limit(scan_limit)
+    notes = await cursor.to_list(scan_limit)
     
     decrypted_notes = []
     for note in notes:
@@ -72,6 +79,8 @@ async def get_user_notes_context(
                     continue
             
             decrypted_notes.append(decrypted)
+            if len(decrypted_notes) >= limit:
+                break
         except Exception as e:
             logger.error(f"Error decrypting note: {e}")
     
@@ -81,6 +90,13 @@ async def get_user_notes_context(
 @router.post("")
 async def chat_with_ai(request: ChatRequest, user: User = Depends(require_auth)):
     """Отправить сообщение AI с контекстом записей"""
+    if request.session_id:
+        own_session = await get_chat_sessions_collection().find_one(
+            {"id": request.session_id, "user_id": user.id}, {"_id": 1}
+        )
+        if not own_session:
+            raise HTTPException(status_code=404, detail="Session not found")
+
     try:
         ai = get_ai_service()
         enc = get_encryption()
@@ -161,7 +177,7 @@ async def chat_with_ai(request: ChatRequest, user: User = Depends(require_auth))
             
             sessions = get_chat_sessions_collection()
             await sessions.update_one(
-                {"id": request.session_id},
+                {"id": request.session_id, "user_id": user.id},
                 update_data
             )
         
@@ -200,9 +216,11 @@ async def chat_with_ai(request: ChatRequest, user: User = Depends(require_auth))
         
         return result
         
-    except Exception as e:
-        logger.error(f"Chat error: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+    except HTTPException:
+        raise
+    except Exception:
+        logger.exception("Chat error")
+        raise HTTPException(status_code=500, detail="Не удалось получить ответ. Попробуйте ещё раз.")
 
 
 @router.get("/notes-context")
@@ -361,6 +379,6 @@ async def suggest_tasks(request: ChatRequest, user: User = Depends(require_auth)
     try:
         ai = get_ai_service()
         return await ai.suggest_tasks(request.message, request.history)
-    except Exception as e:
-        logger.error(f"Suggest tasks error: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+    except Exception:
+        logger.exception("Suggest tasks error")
+        raise HTTPException(status_code=500, detail="Не удалось подобрать задачи. Попробуйте ещё раз.")
