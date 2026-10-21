@@ -17,7 +17,7 @@ lsof -ti:8081 | xargs kill -9 2>/dev/null
 # Запуск бэкенда
 echo -e "${GREEN}🔧 Запуск бэкенда (порт 8000)...${NC}"
 cd backend
-uvicorn server:app --host 0.0.0.0 --port 8000 --reload &
+uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload &
 BACKEND_PID=$!
 cd ..
 
