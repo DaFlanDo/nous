@@ -1,159 +1,112 @@
-# Nous - Пространство для мыслей
+# Nous
 
-Приложение для рефлексии и самоанализа с AI-ассистентом.
+Дневник для рефлексии с ИИ-собеседником. Пишешь записи о том, что происходит и что
+чувствуешь, ведёшь намерения на день, а ассистент помогает разобраться в мыслях — и
+опирается на твои прошлые записи, а не только на текущий разговор.
 
-## Технологии
+Работает в браузере как устанавливаемое приложение (PWA) и пишется без сети:
+записи сохраняются локально и уходят на сервер, когда связь появляется.
 
-- **Frontend**: React Native (Expo) + TypeScript
-- **Backend**: FastAPI + Python
-- **База данных**: MongoDB
-- **Авторизация**: Google OAuth 2.0
+| ![Записи](docs/screenshots/notes.jpg) | ![Редактор](docs/screenshots/editor.jpg) | ![Намерения на день](docs/screenshots/checklists.jpg) | ![Диалог](docs/screenshots/chat.jpg) |
+|---|---|---|---|
+| Записи | Редактор | Намерения на день | Диалог |
 
-## Быстрый старт
+## Зачем
 
-### 1. Настройка Google OAuth (обязательно)
+<!-- ✍️ ТВОЙ ТЕКСТ. 3–5 предложений: почему решил сделать, чем не устроили
+     обычные заметки и чат-боты. Удали этот комментарий, когда напишешь. -->
 
-Для работы авторизации нужно создать проект в Google Cloud Console:
+## Что умеет
 
-1. Перейдите на [Google Cloud Console](https://console.cloud.google.com/)
-2. Создайте новый проект или выберите существующий
-3. Перейдите в **APIs & Services** → **Credentials**
-4. Нажмите **Create Credentials** → **OAuth client ID**
-5. Выберите тип приложения:
-   - Для веб-версии: **Web application**
-   - Добавьте в **Authorized JavaScript origins**:
-     - `http://localhost:8081` (для разработки)
-     - `http://localhost:19006` (для Expo web)
-   - Добавьте в **Authorized redirect URIs**:
-     - `https://auth.expo.io/@your-username/frontend`
-6. Скопируйте **Client ID**
+- **Записи** с автосохранением черновика и поиском.
+- **Намерения на день** — чек-лист, который можно собрать из своих шаблонов.
+- **Диалог с ассистентом.** В контекст попадают последние записи, а если нужно больше,
+  модель сама вызывает инструменты: найти записи по теме, открыть запись за дату,
+  предложить шаги — их одной кнопкой можно добавить в чек-лист.
+- **Выжимка диалога** — длинный разговор сворачивается в запись дневника.
+- **Без сети:** записи и чек-листы правятся офлайн и синхронизируются при подключении.
+- Вход по email или через Google, тёмная тема.
 
-### 2. Настройка переменных окружения
+## Как устроено
 
-**Backend** (`backend/.env`):
-```env
-MONGO_URL=mongodb://localhost:27017
-DB_NAME=reflection_diary
-OPENAI_API_KEY=your-openai-api-key
-OPENAI_BASE_URL=https://api.openai.com/v1
-
-# JWT Configuration
-JWT_SECRET=your-super-secret-jwt-key-change-this-in-production
-
-# Google OAuth
-GOOGLE_CLIENT_ID=your-google-client-id.apps.googleusercontent.com
+```
+Expo (React Native + web) ──REST──▶ FastAPI ──▶ MongoDB (поля записей зашифрованы)
+   │                                   └──────▶ OpenAI-совместимый API (tool calling)
+   └─ IndexedDB: локальные записи + очередь операций
 ```
 
-**Frontend** (`frontend/.env`):
-```env
-EXPO_PUBLIC_BACKEND_URL=http://localhost:8000
-EXPO_PUBLIC_GOOGLE_CLIENT_ID=your-google-client-id.apps.googleusercontent.com
-```
+**Офлайн-слой** (`frontend/lib/offline`). Каждое изменение сначала пишется в IndexedDB
+и, если сети нет, встаёт в очередь. При подключении очередь отправляется по порядку,
+с повторами. Правки записи, которая ещё не дошла до сервера, дописываются в ожидающее
+создание, а удаление такой записи убирает её операции из очереди.
 
-### 3. Запуск
+**ИИ** (`backend/app/services/ai.py`). Длинная история диалога обрезается, а старая часть
+сворачивается в краткое содержание — чтобы не платить за весь разговор в каждом запросе.
+Запросы к ИИ ограничены по числу на пользователя в час.
+
+**Шифрование.** Тексты записей, чек-листов и диалогов хранятся в базе зашифрованными
+(Fernet). Это шифрование на стороне сервера, не сквозное — подробности и ограничения
+в [docs/ENCRYPTION.md](docs/ENCRYPTION.md).
+
+## Что было сложно
+
+<!-- ✍️ ТВОЙ ТЕКСТ. 2–4 пункта: проблема → как решил. Например (если правда было):
+     - офлайн-синхронизация: очередь, локальные id, что делать с правками
+       до отправки;
+     - поиск ИИ по записям, которые лежат в базе зашифрованными;
+     - экономия токенов: обрезка истории и саммари;
+     - PWA и service worker, кэш после обновлений.
+     Удали этот комментарий, когда напишешь. -->
+
+## Стек
+
+**Backend:** Python 3.12, FastAPI, Motor (MongoDB), Pydantic, JWT, cryptography
+**Frontend:** Expo 53, React Native, TypeScript, Expo Router, IndexedDB
+**Инфраструктура:** Docker Compose, nginx, GitHub Actions
+
+## Запуск
 
 ```bash
-# Запустить всё (MongoDB должен быть запущен)
-./scripts/start.sh
-
-# Или отдельно:
-./scripts/start-backend.sh  # Backend на порту 8000
-./scripts/start-frontend.sh # Frontend на порту 8081
+cp .env.example .env            # заполнить MONGO_PASSWORD, JWT_SECRET, ENCRYPTION_KEY
+docker compose up --build       # фронт — http://localhost:3000, API — http://localhost:8000
 ```
 
-## Структура проекта
+Без `OPENAI_API_KEY` работает всё, кроме ассистента. Без `GOOGLE_CLIENT_ID` — вход
+только по email. Деплой на свой сервер — [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
 
+<details>
+<summary>Без Docker</summary>
+
+```bash
+# backend (нужна MongoDB)
+cd backend && python3.12 -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+uvicorn app.main:app --reload            # переменные — из корневого .env
+
+# frontend
+cd frontend && yarn install
+EXPO_PUBLIC_BACKEND_URL=http://localhost:8000 yarn web
 ```
-nous/
-├── backend/              # Бэкенд на FastAPI (модульная архитектура)
-│   ├── app/
-│   │   ├── main.py      # Точка входа
-│   │   ├── config.py    # Конфигурация
-│   │   ├── database.py  # MongoDB
-│   │   ├── models/      # Pydantic модели
-│   │   ├── routes/      # API endpoints
-│   │   └── services/    # Бизнес-логика
-│   └── .env
-├── frontend/             # Фронтенд на React Native (Expo)
-│   ├── app/
-│   │   ├── _layout.tsx    # Корневой layout
-│   │   ├── auth.tsx       # Авторизация
-│   │   ├── index.tsx      # Записи
-│   │   ├── checklists.tsx # Чеклисты
-│   │   ├── state.tsx      # Состояние
-│   │   └── chat.tsx       # AI-чат
-│   └── .env
-├── tests/                # Тесты
-├── docs/                 # Документация
-│   ├── DEPLOYMENT.md
-│   ├── ENCRYPTION.md
-│   ├── PWA_FEATURES.md
-│   └── VPS_DEPLOY.md
-├── scripts/              # Скрипты запуска и деплоя
-│   ├── start.sh
-│   ├── deploy.sh
-│   └── switch-env.sh
-└── config/               # Конфигурационные файлы
-    ├── docker-compose.yml
-    └── .env.example
-└── README.md
+</details>
+
+## Тесты
+
+```bash
+pip install -r backend/requirements.txt -r tests/requirements.txt
+MONGO_URL=mongodb://localhost:27017 pytest -c config/pytest.ini tests
 ```
 
-## API Endpoints
+API-тесты (`tests/test_api.py`) ходят в запущенный сервер (`API_BASE_URL`), остальные
+поднимают приложение прямо в pytest и подменяют ИИ заглушкой: доступ к чужим данным,
+поиск по записям, лимиты, вход через Google, шифрование. Офлайн-синхронизацию я
+проверял в браузере с отключённой сетью.
 
-### Авторизация
-- `POST /api/auth/google` - Вход через Google
-- `GET /api/auth/me` - Получить текущего пользователя
-- `POST /api/auth/logout` - Выход
+## Что дальше
 
-### Записи
-- `GET /api/notes` - Список записей
-- `POST /api/notes` - Создать запись
-- `PUT /api/notes/{id}` - Обновить запись
-- `DELETE /api/notes/{id}` - Удалить запись
-
-### Чеклисты
-- `GET /api/checklists/{date}` - Чеклист на дату
-- `POST /api/checklists` - Создать/обновить чеклист
-- `GET /api/templates` - Шаблоны чеклистов
-
-### AI
-- `POST /api/chat` - Отправить сообщение AI
-- `GET /api/chat/sessions` - Список сессий чата
-- `POST /api/states/analyze` - Анализ состояния
-
-## Авторизация
-
-Приложение использует Google OAuth 2.0 для авторизации:
-
-1. Пользователь нажимает "Войти через Google"
-2. Google возвращает ID Token
-3. Backend верифицирует токен через Google API
-4. Создаётся/обновляется пользователь в MongoDB
-5. Backend возвращает JWT токен
-6. JWT сохраняется в AsyncStorage и используется для всех запросов
-
-## Разработка
-
-### Добавление защиты эндпоинтов
-
-Для защиты эндпоинта добавьте зависимость `require_auth`:
-
-```python
-from server import require_auth, User
-
-@api_router.get("/protected")
-async def protected_endpoint(user: User = Depends(require_auth)):
-    return {"message": f"Hello, {user.name}!"}
-```
-
-### Получение текущего пользователя (опционально)
-
-```python
-from server import get_current_user, User
-
-@api_router.get("/optional-auth")
-async def optional_auth_endpoint(user: User = Depends(get_current_user)):
-    if user:
-        return {"message": f"Hello, {user.name}!"}
-    return {"message": "Hello, anonymous!"}
+<!-- ✍️ ТВОЙ ТЕКСТ (по желанию). Ограничения, которые я видел:
+     - офлайн работает только в браузере: в нативных iOS/Android-сборках нет
+       IndexedDB, и офлайн-слой там выключен;
+     - конфликты правок с двух устройств не разрешаются — побеждает последняя;
+     - ключ шифрования один на всё приложение и не ротируется;
+     - экран чата — один компонент на ~1300 строк, его стоит разбить.
+     Удали этот комментарий, когда напишешь. -->
