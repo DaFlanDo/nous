@@ -31,6 +31,7 @@ COPY package.json yarn.lock* ./
 
 # Копируем только необходимые файлы для сборки
 COPY app ./app
+COPY lib ./lib
 COPY assets ./assets
 COPY public ./public
 COPY tsconfig.json app.json metro.config.js ./

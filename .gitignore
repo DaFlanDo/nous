@@ -90,3 +90,6 @@ android-sdk/ -e
 # Environment files
 *.env
 *.env.*
+
+# Шаблон настроек — в репозитории
+!.env.example
