@@ -7,114 +7,86 @@ on:
     branches: [ "main", "develop" ]
 
 jobs:
-  # Backend тесты
+  # Backend: API-тесты против запущенного сервера + тесты в процессе
   test-backend:
     runs-on: ubuntu-latest
-    
+
     services:
       mongodb:
         image: mongo:7.0
         ports:
           - 27017:27017
-        env:
-          MONGO_INITDB_ROOT_USERNAME: root
-          MONGO_INITDB_ROOT_PASSWORD: testpassword
         options: >-
           --health-cmd "mongosh --eval 'db.adminCommand(\"ping\")'"
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
-    
+
+    env:
+      MONGO_URL: mongodb://localhost:27017
+      DB_NAME: nous_ci
+      JWT_SECRET: ci-jwt-secret
+      ENCRYPTION_KEY: ci-encryption-key
+      OPENAI_API_KEY: ""
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-      
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.10'
+          python-version: '3.12'
           cache: 'pip'
-      
-      - name: Install backend dependencies
-        run: |
-          cd backend
-          pip install -r requirements.txt
-          pip install pytest pytest-asyncio httpx
-      
-      - name: Create backend .env file
-        run: |
-          cd backend
-          cat << EOF > .env
-          MONGO_URL=mongodb://root:testpassword@localhost:27017/
-          DB_NAME=nous_test
-          ENCRYPTION_KEY=test-encryption-key-32-bytes-long-for-testing
-          JWT_SECRET=test-jwt-secret-key-for-ci-testing-purposes
-          JWT_ALGORITHM=HS256
-          OPENAI_API_KEY=sk-test-key
-          OPENAI_BASE_URL=https://api.openai.com/v1
-          GOOGLE_CLIENT_ID=test-client-id.apps.googleusercontent.com
-          GOOGLE_CLIENT_SECRET=test-client-secret
-          PORT=8000
-          HOST=0.0.0.0
-          ALLOWED_ORIGINS=http://localhost:3000,http://localhost:8081
-          EOF
-      
+          cache-dependency-path: |
+            backend/requirements.txt
+            tests/requirements.txt
+
+      - name: Install dependencies
+        run: pip install -r backend/requirements.txt -r tests/requirements.txt
+
       - name: Start backend server
+        working-directory: backend
         run: |
-          cd backend
-          python -m uvicorn server:app --host 0.0.0.0 --port 8000 &
-          sleep 10
-        env:
-          PYTHONUNBUFFERED: 1
-      
-      - name: Check backend health
-        run: |
-          curl -f http://localhost:8000/api/ || exit 1
-      
-      - name: Run API tests
-        run: |
-          cd tests
-          pip install -r requirements.txt
-          pytest test_api.py -v
+          python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 &
+          for i in $(seq 1 30); do curl -sf http://localhost:8000/health && exit 0; sleep 1; done
+          echo "Backend не поднялся"; exit 1
+
+      - name: Run tests
+        run: pytest -c config/pytest.ini tests
         env:
           API_BASE_URL: http://localhost:8000
-      
-      - name: Upload test results
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: test-results
-          path: tests/test-results/
 
-  # Frontend тесты
+  # Frontend: типы, линтер, веб-сборка — любая ошибка роняет CI
   test-frontend:
     runs-on: ubuntu-latest
-    
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-      
+
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '20'
           cache: 'yarn'
           cache-dependency-path: frontend/yarn.lock
-      
+
       - name: Install frontend dependencies
-        run: |
-          cd frontend
-          yarn install --frozen-lockfile
-      
-      - name: Lint frontend code
-        run: |
-          cd frontend
-          yarn lint || true
-      
-      - name: Build frontend
-        run: |
-          cd frontend
-          yarn build:web || true
+        working-directory: frontend
+        run: yarn install --frozen-lockfile
+
+      - name: Type check
+        working-directory: frontend
+        run: npx tsc --noEmit
+
+      - name: Lint
+        working-directory: frontend
+        run: yarn lint
+
+      - name: Build web
+        working-directory: frontend
+        run: yarn build:web
         env:
           EXPO_PUBLIC_BACKEND_URL: http://localhost:8000
           EXPO_PUBLIC_GOOGLE_CLIENT_ID: test-client-id.apps.googleusercontent.com
