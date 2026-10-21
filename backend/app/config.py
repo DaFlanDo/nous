@@ -5,6 +5,7 @@ Application Configuration
 import os
 from pathlib import Path
 from functools import lru_cache
+from pydantic import field_validator
 from pydantic_settings import BaseSettings
 from typing import Optional
 
@@ -28,7 +29,7 @@ class Settings(BaseSettings):
     chat_use_cheap_model_for_summary: bool = True  # Использовать дешёвую модель для саммаризации
     
     # JWT
-    jwt_secret: str = "your-super-secret-key-change-in-production"
+    jwt_secret: str = ""
     jwt_algorithm: str = "HS256"
     jwt_expiration_days: int = 30
     
@@ -36,7 +37,7 @@ class Settings(BaseSettings):
     google_client_id: str = ""
     
     # Encryption
-    encryption_key: str = "default-encryption-key-change-in-production"
+    encryption_key: str = ""
     
     # Server
     host: str = "0.0.0.0"
@@ -44,6 +45,17 @@ class Settings(BaseSettings):
     debug: bool = False
     allowed_origins: str = "*"
     
+    @field_validator("jwt_secret", "encryption_key")
+    @classmethod
+    def _secret_must_be_set(cls, value: str, info) -> str:
+        # Ключ из кода знает любой, кто видел репозиторий: подпись токенов
+        # и шифрование заметок с ним ничего не защищают
+        if not value or "change-in-production" in value:
+            raise ValueError(
+                f"{info.field_name.upper()} не задан — сгенерируйте: openssl rand -hex 32"
+            )
+        return value
+
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"

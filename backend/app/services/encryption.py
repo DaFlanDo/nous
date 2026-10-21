@@ -3,11 +3,18 @@ Server-side Encryption Service
 Данные шифруются перед записью в БД, расшифровываются при чтении
 """
 import base64
+import logging
 from typing import Optional, List
 from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from cryptography.hazmat.backends import default_backend
+
+
+logger = logging.getLogger(__name__)
+
+# Так начинается любой наш шифротекст: base64 от токена Fernet (b"gAAAAA...")
+_TOKEN_PREFIX = base64.urlsafe_b64encode(b"gAAAAA").decode()[:6]
 
 
 class EncryptionService:
@@ -45,7 +52,11 @@ class EncryptionService:
             decrypted = self.cipher.decrypt(decoded)
             return decrypted.decode()
         except Exception:
-            # Backward compatibility with unencrypted data
+            # Старые записи, сохранённые до шифрования, отдаём как есть.
+            # Но если это наш шифротекст, а расшифровать не вышло — скорее всего
+            # сменился ENCRYPTION_KEY: молча отдавать мусор нельзя
+            if encrypted_data.startswith(_TOKEN_PREFIX):
+                logger.error("Не удалось расшифровать данные: проверьте ENCRYPTION_KEY")
             return encrypted_data
     
     def encrypt_dict(self, data: dict, fields: List[str]) -> dict:
