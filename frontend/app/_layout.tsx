@@ -133,6 +133,9 @@ function AppTabs() {
           name="note-edit"
           options={{
             href: null,
+            // Редактор на весь экран: запись сохраняется кнопкой «назад»,
+            // а уход через вкладки оставлял бы только черновик
+            tabBarStyle: { display: 'none' },
           }}
         />
       </Tabs>
