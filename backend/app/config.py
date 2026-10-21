@@ -48,6 +48,8 @@ class Settings(BaseSettings):
         env_file = ".env"
         env_file_encoding = "utf-8"
         case_sensitive = False
+        # Корневой .env общий с docker compose — чужие переменные не ошибка
+        extra = "ignore"
 
 
 @lru_cache()
