@@ -13,7 +13,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useAuthContext } from './_layout';
-import { useTheme } from './theme';
+import { useTheme } from '@/lib/theme';
 
 export default function ProfileScreen() {
   const { user, signOut } = useAuthContext();

@@ -20,8 +20,8 @@ import { format } from 'date-fns';
 import { ru } from 'date-fns/locale';
 import Markdown from 'react-native-markdown-display';
 import { useAuthContext } from './_layout';
-import { useOffline } from './_offline';
-import { useTheme } from './theme';
+import { useOffline } from '@/lib/offline';
+import { useTheme } from '@/lib/theme';
 
 const API_URL = process.env.EXPO_PUBLIC_BACKEND_URL || 'http://localhost:8000';
 
@@ -42,7 +42,7 @@ interface ChatSession {
 
 interface ChecklistSuggestion {
   items: string[];
-  reasoning: string;
+  reasoning?: string;
 }
 
 export default function ChatScreen() {

@@ -16,7 +16,7 @@ import * as WebBrowser from 'expo-web-browser';
 import * as Google from 'expo-auth-session/providers/google';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
-import { useTheme } from './theme';
+import { useTheme } from '@/lib/theme';
 
 WebBrowser.maybeCompleteAuthSession();
 

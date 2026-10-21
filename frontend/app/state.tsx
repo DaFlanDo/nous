@@ -14,7 +14,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { format } from 'date-fns';
 import { ru } from 'date-fns/locale';
 import { useAuthContext } from './_layout';
-import { useTheme } from './theme';
+import { useTheme } from '@/lib/theme';
 
 const API_URL = process.env.EXPO_PUBLIC_BACKEND_URL || 'http://localhost:8000';
 
@@ -151,7 +151,7 @@ export default function StateScreen() {
 
   const fetchData = useCallback(async () => {
     try {
-      const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
+      const headers: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
       const [latestRes, historyRes] = await Promise.all([
         fetch(`${API_URL}/api/states/latest`, { headers }),
         fetch(`${API_URL}/api/states?limit=20`, { headers }),

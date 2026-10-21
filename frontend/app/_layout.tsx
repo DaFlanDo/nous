@@ -4,7 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { StyleSheet, Platform, View, ActivityIndicator } from 'react-native';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import LoginScreen, { useAuth, User, authStorage } from './auth';
-import { ThemeProvider, useTheme } from './theme';
+import { ThemeProvider, useTheme } from '@/lib/theme';
 
 // Контекст авторизации для использования в других компонентах
 interface AuthContextType {
@@ -131,66 +131,6 @@ function AppTabs() {
         />
         <Tabs.Screen
           name="note-edit"
-          options={{
-            href: null,
-          }}
-        />
-        <Tabs.Screen
-          name="theme"
-          options={{
-            href: null,
-          }}
-        />
-        <Tabs.Screen
-          name="_offline"
-          options={{
-            href: null,
-          }}
-        />
-        <Tabs.Screen
-          name="_offline/index"
-          options={{
-            href: null,
-          }}
-        />
-        <Tabs.Screen
-          name="_offline/hooks"
-          options={{
-            href: null,
-          }}
-        />
-        <Tabs.Screen
-          name="_offline/types"
-          options={{
-            href: null,
-          }}
-        />
-        <Tabs.Screen
-          name="_offline/database"
-          options={{
-            href: null,
-          }}
-        />
-        <Tabs.Screen
-          name="_offline/syncService"
-          options={{
-            href: null,
-          }}
-        />
-        <Tabs.Screen
-          name="_offline/notesRepository"
-          options={{
-            href: null,
-          }}
-        />
-        <Tabs.Screen
-          name="_offline/checklistsRepository"
-          options={{
-            href: null,
-          }}
-        />
-        <Tabs.Screen
-          name="_components"
           options={{
             href: null,
           }}
