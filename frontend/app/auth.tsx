@@ -419,145 +419,147 @@ export default function LoginScreen({ onLogin }: { onLogin?: () => void }) {
           contentContainerStyle={styles.scrollContent}
           keyboardShouldPersistTaps="handled"
         >
-          {/* Логотип и название */}
-          <View style={styles.header}>
-            <View style={[styles.logoContainer, { backgroundColor: isDark ? colors.surface : '#F5F0E8' }]}>
-              <Ionicons name="leaf" size={48} color={colors.primary} />
+          <View style={styles.column}>
+            {/* Логотип и название */}
+            <View style={styles.header}>
+              <View style={[styles.logoContainer, { backgroundColor: isDark ? colors.surface : '#F5F0E8' }]}>
+                <Ionicons name="leaf" size={48} color={colors.primary} />
+              </View>
+              <Text style={[styles.title, { color: colors.text }]}>Nous</Text>
+              <Text style={[styles.subtitle, { color: colors.textSecondary }]}>νοῦς</Text>
+              <Text style={[styles.description, { color: colors.textSecondary }]}>
+                Пространство для мыслей{'\n'}и рефлексии
+              </Text>
             </View>
-            <Text style={[styles.title, { color: colors.text }]}>Nous</Text>
-            <Text style={[styles.subtitle, { color: colors.textSecondary }]}>νοῦς</Text>
-            <Text style={[styles.description, { color: colors.textSecondary }]}>
-              Пространство для мыслей{'\n'}и рефлексии
-            </Text>
-          </View>
 
-          {/* Форма входа/регистрации */}
-          <View style={styles.formContainer}>
-            {mode === 'register' && (
+            {/* Форма входа/регистрации */}
+            <View style={styles.formContainer}>
+              {mode === 'register' && (
+                <View style={[styles.inputContainer, { backgroundColor: colors.cardBackground, borderColor: isDark ? colors.border : '#E8E1D5' }]}>
+                  <Ionicons name="person-outline" size={20} color={colors.primary} style={styles.inputIcon} />
+                  <TextInput
+                    style={[styles.input, { color: colors.text }]}
+                    placeholder="Имя"
+                    placeholderTextColor={colors.textSecondary}
+                    value={name}
+                    onChangeText={setName}
+                    autoCapitalize="words"
+                    editable={!isLoading}
+                  />
+                </View>
+              )}
+
               <View style={[styles.inputContainer, { backgroundColor: colors.cardBackground, borderColor: isDark ? colors.border : '#E8E1D5' }]}>
-                <Ionicons name="person-outline" size={20} color={colors.primary} style={styles.inputIcon} />
+                <Ionicons name="mail-outline" size={20} color={colors.primary} style={styles.inputIcon} />
                 <TextInput
                   style={[styles.input, { color: colors.text }]}
-                  placeholder="Имя"
+                  placeholder="Email"
                   placeholderTextColor={colors.textSecondary}
-                  value={name}
-                  onChangeText={setName}
-                  autoCapitalize="words"
+                  value={email}
+                  onChangeText={setEmail}
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  autoComplete="email"
+                  textContentType="emailAddress"
+                  inputMode="email"
                   editable={!isLoading}
+                  // @ts-ignore - web attributes
+                  name="email"
+                  id="email"
                 />
               </View>
-            )}
 
-            <View style={[styles.inputContainer, { backgroundColor: colors.cardBackground, borderColor: isDark ? colors.border : '#E8E1D5' }]}>
-              <Ionicons name="mail-outline" size={20} color={colors.primary} style={styles.inputIcon} />
-              <TextInput
-                style={[styles.input, { color: colors.text }]}
-                placeholder="Email"
-                placeholderTextColor={colors.textSecondary}
-                value={email}
-                onChangeText={setEmail}
-                keyboardType="email-address"
-                autoCapitalize="none"
-                autoCorrect={false}
-                autoComplete="email"
-                textContentType="emailAddress"
-                inputMode="email"
-                editable={!isLoading}
-                // @ts-ignore - web attributes
-                name="email"
-                id="email"
-              />
-            </View>
-
-            <View style={[styles.inputContainer, { backgroundColor: colors.cardBackground, borderColor: isDark ? colors.border : '#E8E1D5' }]}>
-              <Ionicons name="lock-closed-outline" size={20} color={colors.primary} style={styles.inputIcon} />
-              <TextInput
-                style={[styles.input, { color: colors.text }]}
-                placeholder="Пароль"
-                placeholderTextColor={colors.textSecondary}
-                value={password}
-                onChangeText={setPassword}
-                secureTextEntry={!showPassword}
-                autoCapitalize="none"
-                autoCorrect={false}
-                autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
-                textContentType={mode === 'login' ? 'password' : 'newPassword'}
-                editable={!isLoading}
-                // @ts-ignore - web attributes
-                name="password"
-                id="password"
-              />
-              <TouchableOpacity
-                onPress={() => setShowPassword(!showPassword)}
-                style={styles.eyeIcon}
-              >
-                <Ionicons 
-                  name={showPassword ? "eye-outline" : "eye-off-outline"} 
-                  size={20} 
-                  color={colors.primary} 
+              <View style={[styles.inputContainer, { backgroundColor: colors.cardBackground, borderColor: isDark ? colors.border : '#E8E1D5' }]}>
+                <Ionicons name="lock-closed-outline" size={20} color={colors.primary} style={styles.inputIcon} />
+                <TextInput
+                  style={[styles.input, { color: colors.text }]}
+                  placeholder="Пароль"
+                  placeholderTextColor={colors.textSecondary}
+                  value={password}
+                  onChangeText={setPassword}
+                  secureTextEntry={!showPassword}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
+                  textContentType={mode === 'login' ? 'password' : 'newPassword'}
+                  editable={!isLoading}
+                  // @ts-ignore - web attributes
+                  name="password"
+                  id="password"
                 />
-              </TouchableOpacity>
-            </View>
-
-            <TouchableOpacity
-              style={[styles.emailButton, { backgroundColor: colors.primary }, isLoading && styles.buttonDisabled]}
-              onPress={handleEmailAuth}
-              disabled={isLoading}
-            >
-              {isLoading ? (
-                <ActivityIndicator color={colors.background} />
-              ) : (
-                <Text style={[styles.emailButtonText, { color: colors.background }]}>
-                  {mode === 'login' ? 'Войти' : 'Зарегистрироваться'}
-                </Text>
-              )}
-            </TouchableOpacity>
-
-            <TouchableOpacity 
-              onPress={toggleMode}
-              disabled={isLoading}
-              style={styles.toggleModeButton}
-            >
-              <Text style={[styles.toggleModeText, { color: colors.primary }]}>
-                {mode === 'login' 
-                  ? 'Нет аккаунта? Зарегистрируйтесь' 
-                  : 'Уже есть аккаунт? Войдите'}
-              </Text>
-            </TouchableOpacity>
-
-            <View style={styles.divider}>
-              <View style={[styles.dividerLine, { backgroundColor: isDark ? colors.border : '#E8E1D5' }]} />
-              <Text style={[styles.dividerText, { color: colors.textSecondary }]}>или</Text>
-              <View style={[styles.dividerLine, { backgroundColor: isDark ? colors.border : '#E8E1D5' }]} />
-            </View>
-
-            <TouchableOpacity
-              style={[styles.googleButton, { backgroundColor: colors.cardBackground, borderColor: isDark ? colors.border : '#E8E1D5' }, (!request || isLoading) && styles.buttonDisabled]}
-              onPress={handleGooglePress}
-              disabled={!request || isLoading}
-              activeOpacity={0.8}
-            >
-              {isLoading ? (
-                <ActivityIndicator color={colors.text} />
-              ) : (
-                <>
-                  <Image
-                    source={{ uri: 'https://www.google.com/favicon.ico' }}
-                    style={styles.googleIcon}
+                <TouchableOpacity
+                  onPress={() => setShowPassword(!showPassword)}
+                  style={styles.eyeIcon}
+                >
+                  <Ionicons 
+                    name={showPassword ? "eye-outline" : "eye-off-outline"} 
+                    size={20} 
+                    color={colors.primary} 
                   />
-                  <Text style={[styles.googleButtonText, { color: colors.text }]}>Войти через Google</Text>
-                </>
+                </TouchableOpacity>
+              </View>
+
+              <TouchableOpacity
+                style={[styles.emailButton, { backgroundColor: colors.primary }, isLoading && styles.buttonDisabled]}
+                onPress={handleEmailAuth}
+                disabled={isLoading}
+              >
+                {isLoading ? (
+                  <ActivityIndicator color={colors.background} />
+                ) : (
+                  <Text style={[styles.emailButtonText, { color: colors.background }]}>
+                    {mode === 'login' ? 'Войти' : 'Зарегистрироваться'}
+                  </Text>
+                )}
+              </TouchableOpacity>
+
+              <TouchableOpacity 
+                onPress={toggleMode}
+                disabled={isLoading}
+                style={styles.toggleModeButton}
+              >
+                <Text style={[styles.toggleModeText, { color: colors.primary }]}>
+                  {mode === 'login' 
+                    ? 'Нет аккаунта? Зарегистрируйтесь' 
+                    : 'Уже есть аккаунт? Войдите'}
+                </Text>
+              </TouchableOpacity>
+
+              <View style={styles.divider}>
+                <View style={[styles.dividerLine, { backgroundColor: isDark ? colors.border : '#E8E1D5' }]} />
+                <Text style={[styles.dividerText, { color: colors.textSecondary }]}>или</Text>
+                <View style={[styles.dividerLine, { backgroundColor: isDark ? colors.border : '#E8E1D5' }]} />
+              </View>
+
+              <TouchableOpacity
+                style={[styles.googleButton, { backgroundColor: colors.cardBackground, borderColor: isDark ? colors.border : '#E8E1D5' }, (!request || isLoading) && styles.buttonDisabled]}
+                onPress={handleGooglePress}
+                disabled={!request || isLoading}
+                activeOpacity={0.8}
+              >
+                {isLoading ? (
+                  <ActivityIndicator color={colors.text} />
+                ) : (
+                  <>
+                    <Image
+                      source={{ uri: 'https://www.google.com/favicon.ico' }}
+                      style={styles.googleIcon}
+                    />
+                    <Text style={[styles.googleButtonText, { color: colors.text }]}>Войти через Google</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+
+              {error && (
+                <Text style={styles.errorText}>{error}</Text>
               )}
-            </TouchableOpacity>
 
-            {error && (
-              <Text style={styles.errorText}>{error}</Text>
-            )}
-
-            <Text style={[styles.privacyText, { color: colors.textSecondary }]}>
-              Входя в приложение, вы соглашаетесь с{'\n'}
-              условиями использования
-            </Text>
+              <Text style={[styles.privacyText, { color: colors.textSecondary }]}>
+                Входя в приложение, вы соглашаетесь с{'\n'}
+                условиями использования
+              </Text>
+            </View>
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -574,6 +576,13 @@ const styles = StyleSheet.create({
     flexGrow: 1,
     paddingHorizontal: 32,
     paddingVertical: 24,
+    // На широком экране форма не растягивается, а стоит по центру
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  column: {
+    width: '100%',
+    maxWidth: 400,
   },
   header: {
     alignItems: 'center',

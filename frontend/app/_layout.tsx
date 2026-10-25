@@ -1,7 +1,7 @@
 import React, { useState, useEffect, createContext, useContext } from 'react';
 import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { StyleSheet, Platform, View, ActivityIndicator } from 'react-native';
+import { StyleSheet, Platform, View, ActivityIndicator, useWindowDimensions } from 'react-native';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import LoginScreen, { useAuth, User, authStorage } from './auth';
 import { ThemeProvider, useTheme } from '@/lib/theme';
@@ -174,9 +174,30 @@ export default function RootLayout() {
         isAuthenticated: auth.isAuthenticated,
         signOut: auth.signOut,
       }}>
-        <AppTabs />
+        <WebColumn>
+          <AppTabs />
+        </WebColumn>
       </AuthContext.Provider>
     </ThemeProvider>
+  );
+}
+
+// Интерфейс рассчитан на телефон: в браузере на широком экране
+// держим его в колонке по центру, а не растягиваем на весь монитор
+function WebColumn({ children }: { children: React.ReactNode }) {
+  const { colors } = useTheme();
+  const { width } = useWindowDimensions();
+
+  if (Platform.OS !== 'web' || width <= WEB_COLUMN_WIDTH) {
+    return <>{children}</>;
+  }
+
+  return (
+    <View style={[styles.webOuter, { backgroundColor: colors.background }]}>
+      <View style={[styles.webColumn, { borderColor: colors.border }]}>
+        {children}
+      </View>
+    </View>
   );
 }
 
@@ -189,7 +210,21 @@ function LoadingScreen() {
   );
 }
 
+const WEB_COLUMN_WIDTH = 720;
+
 const styles = StyleSheet.create({
+  webOuter: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  webColumn: {
+    flex: 1,
+    width: '100%',
+    maxWidth: WEB_COLUMN_WIDTH,
+    borderLeftWidth: StyleSheet.hairlineWidth,
+    borderRightWidth: StyleSheet.hairlineWidth,
+    overflow: 'hidden',
+  },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
