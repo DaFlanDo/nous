@@ -1,7 +1,7 @@
 import React, { useState, useEffect, createContext, useContext } from 'react';
-import { Tabs } from 'expo-router';
+import { Tabs, router, usePathname } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { StyleSheet, Platform, View, ActivityIndicator, useWindowDimensions } from 'react-native';
+import { StyleSheet, Platform, View, Text, Pressable, ActivityIndicator, useWindowDimensions } from 'react-native';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import LoginScreen, { useAuth, User, authStorage } from './auth';
 import { ThemeProvider, useTheme } from '@/lib/theme';
@@ -24,7 +24,7 @@ export function useAuthContext() {
   return context;
 }
 
-function AppTabs() {
+function AppTabs({ hideTabBar }: { hideTabBar: boolean }) {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
   
@@ -47,7 +47,8 @@ function AppTabs() {
       <Tabs
         screenOptions={{
           headerShown: false,
-          tabBarStyle: [
+          // На десктопе навигация в боковом меню, нижняя панель не нужна
+          tabBarStyle: hideTabBar ? { display: 'none' } : [
             styles.tabBar, 
             { 
               backgroundColor: colors.background, 
@@ -180,29 +181,121 @@ export default function RootLayout() {
         isAuthenticated: auth.isAuthenticated,
         signOut: auth.signOut,
       }}>
-        <WebColumn>
-          <AppTabs />
-        </WebColumn>
+        <WebShell />
       </AuthContext.Provider>
     </ThemeProvider>
   );
 }
 
-// Интерфейс рассчитан на телефон: в браузере на широком экране
-// держим его в колонке по центру, а не растягиваем на весь монитор
-function WebColumn({ children }: { children: React.ReactNode }) {
-  const { colors } = useTheme();
-  const { width } = useWindowDimensions();
+// Интерфейс рассчитан на телефон (mobile first). В браузере:
+// до 720px — как в приложении, до 1100px — колонка по центру с нижними
+// вкладками, шире — боковое меню слева и колонка контента по центру
+type WebLayout = 'native' | 'column' | 'sidebar';
 
-  if (Platform.OS !== 'web' || width <= WEB_COLUMN_WIDTH) {
-    return <>{children}</>;
+export function useWebLayout(): WebLayout {
+  const { width } = useWindowDimensions();
+  if (Platform.OS !== 'web' || width <= WEB_COLUMN_WIDTH) return 'native';
+  return width >= SIDEBAR_BREAKPOINT ? 'sidebar' : 'column';
+}
+
+function WebShell() {
+  const { colors } = useTheme();
+  const layout = useWebLayout();
+  // Редактор открыт на весь экран: уход через меню оставлял бы только черновик
+  const isEditor = usePathname() === '/note-edit';
+
+  if (layout === 'native') {
+    return <AppTabs hideTabBar={false} />;
+  }
+
+  if (layout === 'column') {
+    return (
+      <View style={[styles.webOuter, { backgroundColor: colors.background }]}>
+        <View style={[styles.webColumn, styles.webColumnBordered, { borderColor: colors.border }]}>
+          <AppTabs hideTabBar={false} />
+        </View>
+      </View>
+    );
   }
 
   return (
-    <View style={[styles.webOuter, { backgroundColor: colors.background }]}>
-      <View style={[styles.webColumn, { borderColor: colors.border }]}>
-        {children}
+    <View style={[styles.webRow, { backgroundColor: colors.background }]}>
+      {!isEditor && <Sidebar />}
+      <View style={styles.webOuter}>
+        <View style={styles.webColumn}>
+          <AppTabs hideTabBar />
+        </View>
       </View>
+    </View>
+  );
+}
+
+const NAV_ITEMS = [
+  { href: '/', title: 'Записи', icon: 'journal' },
+  { href: '/checklists', title: 'Задачи', icon: 'checkbox' },
+  { href: '/state', title: 'Состояние', icon: 'pulse' },
+  { href: '/chat', title: 'Диалог', icon: 'sparkles' },
+] as const;
+
+// В react-native-web Pressable отдаёт ещё и hovered, в типах RN его нет
+type WebPressState = { pressed: boolean; hovered?: boolean };
+
+function Sidebar() {
+  const { colors } = useTheme();
+  const { user } = useAuthContext();
+  const pathname = usePathname();
+
+  const itemStyle = (active: boolean) => ({ pressed, hovered }: WebPressState) => [
+    styles.navItem,
+    active && { backgroundColor: colors.cardBackground },
+    !active && (hovered || pressed) && { backgroundColor: colors.paperLine },
+  ];
+
+  return (
+    <View style={[styles.sidebar, { borderRightColor: colors.border }]}>
+      <View style={styles.brand}>
+        <Text style={[styles.brandName, { color: colors.text }]}>Nous</Text>
+        <Text style={[styles.brandGreek, { color: colors.textSecondary }]}>νοῦς</Text>
+      </View>
+
+      <View style={styles.nav}>
+        {NAV_ITEMS.map(item => {
+          const active = pathname === item.href;
+          return (
+            <Pressable
+              key={item.href}
+              onPress={() => router.navigate(item.href)}
+              style={itemStyle(active) as any}
+              accessibilityRole="link"
+            >
+              <Ionicons
+                name={active ? item.icon : `${item.icon}-outline`}
+                size={20}
+                color={active ? colors.primary : colors.textSecondary}
+              />
+              <Text style={[styles.navLabel, { color: active ? colors.text : colors.textSecondary }, active && styles.navLabelActive]}>
+                {item.title}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </View>
+
+      <Pressable
+        onPress={() => router.navigate('/profile')}
+        style={itemStyle(pathname === '/profile') as any}
+        accessibilityRole="link"
+      >
+        <View style={[styles.avatar, { backgroundColor: colors.cardBackground, borderColor: colors.border }]}>
+          <Ionicons name="person" size={16} color={colors.primary} />
+        </View>
+        <View style={styles.profileText}>
+          <Text style={[styles.profileName, { color: colors.text }]} numberOfLines={1}>{user?.name || 'Профиль'}</Text>
+          {!!user?.email && (
+            <Text style={[styles.profileEmail, { color: colors.textSecondary }]} numberOfLines={1}>{user.email}</Text>
+          )}
+        </View>
+      </Pressable>
     </View>
   );
 }
@@ -217,19 +310,90 @@ function LoadingScreen() {
 }
 
 const WEB_COLUMN_WIDTH = 720;
+const SIDEBAR_BREAKPOINT = 1100;
+const SIDEBAR_WIDTH = 248;
+const serif = Platform.OS === 'ios' ? 'Georgia' : 'serif';
 
 const styles = StyleSheet.create({
   webOuter: {
     flex: 1,
     alignItems: 'center',
   },
+  webRow: {
+    flex: 1,
+    flexDirection: 'row',
+  },
   webColumn: {
     flex: 1,
     width: '100%',
     maxWidth: WEB_COLUMN_WIDTH,
+    overflow: 'hidden',
+  },
+  webColumnBordered: {
     borderLeftWidth: StyleSheet.hairlineWidth,
     borderRightWidth: StyleSheet.hairlineWidth,
-    overflow: 'hidden',
+  },
+  sidebar: {
+    width: SIDEBAR_WIDTH,
+    paddingHorizontal: 16,
+    paddingTop: 28,
+    paddingBottom: 20,
+    borderRightWidth: StyleSheet.hairlineWidth,
+  },
+  brand: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    gap: 8,
+    paddingHorizontal: 12,
+    marginBottom: 28,
+  },
+  brandName: {
+    fontFamily: serif,
+    fontSize: 28,
+    letterSpacing: 1,
+  },
+  brandGreek: {
+    fontFamily: serif,
+    fontSize: 15,
+    fontStyle: 'italic',
+  },
+  nav: {
+    flex: 1,
+    gap: 2,
+  },
+  navItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 10,
+  },
+  navLabel: {
+    fontSize: 15,
+  },
+  navLabelActive: {
+    fontWeight: '600',
+  },
+  avatar: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    borderWidth: StyleSheet.hairlineWidth,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  profileText: {
+    flex: 1,
+    minWidth: 0,
+  },
+  profileName: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  profileEmail: {
+    fontSize: 12,
+    marginTop: 1,
   },
   loadingContainer: {
     flex: 1,

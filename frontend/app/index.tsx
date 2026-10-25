@@ -17,7 +17,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { format } from 'date-fns';
 import { ru } from 'date-fns/locale';
-import { useAuthContext } from './_layout';
+import { useAuthContext, useWebLayout } from './_layout';
 import { useOffline, useNotes, Note } from '@/lib/offline';
 import { useTheme } from '@/lib/theme';
 
@@ -84,6 +84,9 @@ export default function NotesScreen() {
     if (hour < 18) return 'Добрый день';
     return 'Добрый вечер';
   };
+
+  // На десктопе логотип и профиль уже в боковом меню
+  const hasSidebar = useWebLayout() === 'sidebar';
 
   const handleProfilePress = () => {
     router.push('/profile');
@@ -168,11 +171,11 @@ export default function NotesScreen() {
           <View>
             <Text style={[styles.greeting, { color: colors.textSecondary }]}>{getGreeting()}</Text>
             <View style={styles.brandRow}>
-              <Text style={[styles.headerTitle, { color: colors.text }]}>Nous</Text>
-              <Text style={[styles.greekAccent, { color: colors.primary }]}>νοῦς</Text>
+              <Text style={[styles.headerTitle, { color: colors.text }]}>{hasSidebar ? 'Записи' : 'Nous'}</Text>
+              {!hasSidebar && <Text style={[styles.greekAccent, { color: colors.primary }]}>νοῦς</Text>}
             </View>
           </View>
-          <TouchableOpacity style={styles.profileBtn} onPress={handleProfilePress}>
+          {!hasSidebar && <TouchableOpacity style={styles.profileBtn} onPress={handleProfilePress}>
             {user?.picture ? (
               <Image source={{ uri: user.picture }} style={styles.profileImage} />
             ) : (
@@ -180,9 +183,9 @@ export default function NotesScreen() {
                 <Ionicons name="person" size={20} color={colors.primary} />
               </View>
             )}
-          </TouchableOpacity>
+          </TouchableOpacity>}
         </View>
-        <Text style={[styles.headerSubtitle, { color: colors.textSecondary }]}>пространство для мыслей</Text>
+        {!hasSidebar && <Text style={[styles.headerSubtitle, { color: colors.textSecondary }]}>пространство для мыслей</Text>}
         
         {/* Индикатор офлайн и несинхронизированных заметок */}
         {(!isOnline || pendingCount > 0) && (
