@@ -42,6 +42,12 @@ COPY expo-env.d.ts* eslint.config.js* ./
 # Сборка приложения
 RUN yarn build:web
 
+# Версия кеша Service Worker — своя у каждой сборки: после деплоя новый SW
+# удаляет кеш со старыми бандлами (раньше версию надо было менять руками)
+RUN BUILD_ID=$(date -u +%Y%m%d%H%M%S) && \
+    sed -i "s/const SW_VERSION = '[^']*';/const SW_VERSION = '$BUILD_ID';/" dist/sw.js && \
+    grep -q "SW_VERSION = '$BUILD_ID'" dist/sw.js
+
 # Stage 3: Production (minimal image)
 FROM nginx:alpine AS production
 

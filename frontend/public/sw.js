@@ -8,7 +8,8 @@
  * - Офлайн: показываем кэшированную версию
  */
 
-// Версия SW — ОБЯЗАТЕЛЬНО менять при каждом деплое!
+// Версия SW. В Docker-образе подставляется уникальная на каждую сборку
+// (см. frontend/Dockerfile), отсюда — только для локального запуска
 const SW_VERSION = '2.4.0';
 const CACHE_PREFIX = 'nous-';
 const CACHE_NAME = `${CACHE_PREFIX}${SW_VERSION}`;
