@@ -138,6 +138,12 @@ function AppTabs() {
             tabBarStyle: { display: 'none' },
           }}
         />
+        <Tabs.Screen
+          name="+not-found"
+          options={{
+            href: null, // Только перенаправляет на записи, не вкладка
+          }}
+        />
       </Tabs>
     </SafeAreaProvider>
   );
