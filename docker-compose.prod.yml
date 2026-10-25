@@ -1,0 +1,31 @@
+# Продакшен за общим Caddy (см. репозиторий deploy):
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+# Фронт и API живут на одном домене: Caddy отправляет /api/* в backend,
+# остальное — в nginx со статикой, поэтому CORS не нужен.
+# Порты наружу не публикуются. Нужен Docker Compose 2.24+ (для !reset).
+# PUBLIC_HOST — домен сайта, например nous.example.com
+name: nous
+
+services:
+  backend:
+    ports: !reset []
+    environment:
+      - ALLOWED_ORIGINS=https://${PUBLIC_HOST:?Задайте PUBLIC_HOST в .env}
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000",
+              "--proxy-headers", "--forwarded-allow-ips", "*"]
+    networks:
+      web:
+        aliases: [nous-backend]
+
+  frontend:
+    ports: !reset []
+    build:
+      args:
+        - EXPO_PUBLIC_BACKEND_URL=https://${PUBLIC_HOST}
+    networks:
+      web:
+        aliases: [nous-frontend]
+
+networks:
+  web:
+    external: true
