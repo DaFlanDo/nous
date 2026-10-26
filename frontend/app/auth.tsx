@@ -515,28 +515,6 @@ export default function LoginScreen({ onLogin }: { onLogin?: () => void }) {
 
             {/* Форма входа/регистрации */}
             <View style={styles.formContainer}>
-              {demoEnabled && (
-                <>
-                  <TouchableOpacity
-                    style={[styles.emailButton, { backgroundColor: colors.primary }, isLoading && styles.buttonDisabled]}
-                    onPress={handleDemo}
-                    disabled={isLoading}
-                  >
-                    <Text style={[styles.emailButtonText, { color: colors.background }]}>
-                      Попробовать без регистрации
-                    </Text>
-                  </TouchableOpacity>
-                  <Text style={[styles.demoHint, { color: colors.textSecondary }]}>
-                    Откроется ваша личная песочница с примерами записей, состояний и диалогом с ИИ.
-                    Через сутки она удалится.
-                  </Text>
-                  <View style={styles.divider}>
-                    <View style={[styles.dividerLine, { backgroundColor: isDark ? colors.border : '#E8E1D5' }]} />
-                    <Text style={[styles.dividerText, { color: colors.textSecondary }]}>или войдите</Text>
-                    <View style={[styles.dividerLine, { backgroundColor: isDark ? colors.border : '#E8E1D5' }]} />
-                  </View>
-                </>
-              )}
               {mode === 'register' && (
                 <View style={[styles.inputContainer, { backgroundColor: colors.cardBackground, borderColor: isDark ? colors.border : '#E8E1D5' }]}>
                   <Ionicons name="person-outline" size={20} color={colors.primary} style={styles.inputIcon} />
@@ -654,6 +632,24 @@ export default function LoginScreen({ onLogin }: { onLogin?: () => void }) {
                 )}
               </TouchableOpacity>
 
+              {/* Демо — запасной путь: обычный вход остаётся главным */}
+              {demoEnabled && (
+                <>
+                  <TouchableOpacity
+                    style={[styles.demoButton, { borderColor: colors.primary }, isLoading && styles.buttonDisabled]}
+                    onPress={handleDemo}
+                    disabled={isLoading}
+                    activeOpacity={0.8}
+                  >
+                    <Ionicons name="sparkles-outline" size={18} color={colors.primary} style={styles.demoIcon} />
+                    <Text style={[styles.demoButtonText, { color: colors.primary }]}>Попробовать без регистрации</Text>
+                  </TouchableOpacity>
+                  <Text style={[styles.demoHint, { color: colors.textSecondary }]}>
+                    Песочница с примерами записей и диалогом с ИИ, удалится через сутки
+                  </Text>
+                </>
+              )}
+
               {error && (
                 <Text style={styles.errorText}>{error}</Text>
               )}
@@ -760,11 +756,30 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
   },
+  demoButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 14,
+    paddingHorizontal: 24,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderStyle: 'dashed',
+    width: '100%',
+    marginTop: 12,
+  },
+  demoIcon: {
+    marginRight: 10,
+  },
+  demoButtonText: {
+    fontSize: 15,
+    fontWeight: '600',
+  },
   demoHint: {
     fontSize: 13,
     lineHeight: 18,
     textAlign: 'center',
-    marginBottom: 8,
+    marginTop: 8,
   },
   toggleModeButton: {
     paddingVertical: 8,
