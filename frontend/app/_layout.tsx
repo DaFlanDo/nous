@@ -181,7 +181,10 @@ export default function RootLayout() {
         isAuthenticated: auth.isAuthenticated,
         signOut: auth.signOut,
       }}>
-        <WebShell />
+        <View style={styles.root}>
+          {auth.user?.is_demo && <DemoBanner expiresAt={auth.user.demo_expires_at} onExit={auth.signOut} />}
+          <WebShell />
+        </View>
       </AuthContext.Provider>
     </ThemeProvider>
   );
@@ -300,6 +303,25 @@ function Sidebar() {
   );
 }
 
+// Гость демо-режима видит, что это песочница и когда она удалится
+function DemoBanner({ expiresAt, onExit }: { expiresAt?: string | null; onExit: () => void }) {
+  const { colors } = useTheme();
+  const insets = useSafeAreaInsets();
+  const hoursLeft = expiresAt
+    ? Math.max(1, Math.round((new Date(expiresAt).getTime() - Date.now()) / 3_600_000))
+    : null;
+  return (
+    <View style={[styles.demoBanner, { backgroundColor: colors.primary, paddingTop: insets.top + 6 }]}>
+      <Text style={[styles.demoBannerText, { color: colors.background }]} numberOfLines={1}>
+        Демо-песочница{hoursLeft ? ` · удалится через ${hoursLeft} ч` : ''}
+      </Text>
+      <Pressable onPress={onExit} accessibilityRole="button">
+        <Text style={[styles.demoBannerText, styles.demoBannerExit, { color: colors.background }]}>Выйти</Text>
+      </Pressable>
+    </View>
+  );
+}
+
 function LoadingScreen() {
   const { colors } = useTheme();
   return (
@@ -315,6 +337,24 @@ const SIDEBAR_WIDTH = 248;
 const serif = Platform.OS === 'ios' ? 'Georgia' : 'serif';
 
 const styles = StyleSheet.create({
+  root: {
+    flex: 1,
+  },
+  demoBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 16,
+    paddingHorizontal: 16,
+    paddingBottom: 6,
+  },
+  demoBannerText: {
+    fontSize: 13,
+    fontWeight: '500',
+  },
+  demoBannerExit: {
+    textDecorationLine: 'underline',
+  },
   webOuter: {
     flex: 1,
     alignItems: 'center',

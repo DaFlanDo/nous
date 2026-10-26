@@ -39,6 +39,12 @@ class Settings(BaseSettings):
     
     # Encryption
     encryption_key: str = ""
+
+    # Демо-режим: «Попробовать без регистрации» — своя песочница каждому (services/demo.py)
+    demo_mode: bool = False
+    demo_ttl_hours: int = 24
+    demo_sandboxes_per_ip_per_hour: int = 10
+    demo_ai_requests_per_hour: int = 30  # на все песочницы вместе: ключ общий и платный
     
     # Server
     host: str = "0.0.0.0"

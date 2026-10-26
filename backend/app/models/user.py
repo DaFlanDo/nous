@@ -17,6 +17,9 @@ class User(BaseModel):
     password_hash: Optional[str] = None
     created_at: datetime = Field(default_factory=datetime.utcnow)
     last_login: datetime = Field(default_factory=datetime.utcnow)
+    # Временный гость демо-режима: удаляется вместе с данными после demo_expires_at
+    is_demo: bool = False
+    demo_expires_at: Optional[datetime] = None
 
 
 class GoogleAuthRequest(BaseModel):

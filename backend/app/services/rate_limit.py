@@ -11,6 +11,7 @@ from fastapi import Depends, HTTPException
 from ..config import settings
 from ..models import User
 from .auth import require_auth
+from .demo import check_demo_ai_quota
 
 WINDOW_SECONDS = 3600
 _calls: dict[str, deque] = defaultdict(deque)
@@ -35,4 +36,5 @@ async def ai_rate_limit(user: User = Depends(require_auth)) -> User:
             status_code=429,
             detail="Слишком много запросов к ассистенту. Попробуйте через некоторое время.",
         )
+    check_demo_ai_quota(user)
     return user

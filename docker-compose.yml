@@ -36,6 +36,8 @@ services:
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - OPENAI_BASE_URL=${OPENAI_BASE_URL:-https://api.openai.com/v1}
       - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
+      # «Попробовать без регистрации»: временная песочница с демо-данными на 24 часа
+      - DEMO_MODE=${DEMO_MODE:-true}
       - PORT=8000
       - HOST=0.0.0.0
       - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-http://localhost:3000,http://localhost:8081}

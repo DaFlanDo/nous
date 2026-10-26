@@ -17,6 +17,7 @@ import * as Google from 'expo-auth-session/providers/google';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@/lib/theme';
+import { notesRepository, checklistsRepository } from '@/lib/offline';
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -32,7 +33,33 @@ export interface User {
   email: string;
   name: string;
   picture?: string;
+  /** Временный гость демо-режима: песочница удалится после demo_expires_at */
+  is_demo?: boolean;
+  demo_expires_at?: string | null;
 }
+
+// Офлайн-кэш общий для устройства: без очистки следующий вошедший увидел бы чужие записи
+async function clearOfflineCache() {
+  try {
+    await Promise.all([notesRepository.clearLocal(), checklistsRepository.clearLocal()]);
+  } catch (e) {
+    console.warn('[Auth] Не удалось очистить офлайн-кэш:', e);
+  }
+}
+
+/** Включён ли на сервере демо-режим («Попробовать без регистрации») */
+export async function fetchDemoEnabled(): Promise<boolean> {
+  try {
+    const response = await fetch(`${API_URL}/api/auth/demo`);
+    return response.ok && (await response.json()).enabled === true;
+  } catch {
+    return false;
+  }
+}
+
+/** Прямая ссылка на демо из портфолио: nous.daflando.dev/demo */
+export const isDemoLink = () =>
+  Platform.OS === 'web' && typeof window !== 'undefined' && window.location.pathname === '/demo';
 
 interface AuthState {
   user: User | null;
@@ -297,8 +324,38 @@ export function useAuth() {
     }
   };
 
+  const signInDemo = async () => {
+    try {
+      setState(prev => ({ ...prev, isLoading: true }));
+
+      const response = await fetch(`${API_URL}/api/auth/demo`, { method: 'POST' });
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.detail || 'Не удалось открыть демо');
+      }
+
+      const data = await response.json();
+      await clearOfflineCache();
+      await authStorage.setAuth(data.access_token, data.user);
+
+      setState({
+        user: data.user,
+        token: data.access_token,
+        isLoading: false,
+        isAuthenticated: true,
+      });
+
+      return { success: true };
+    } catch (error: any) {
+      console.error('Demo sign in error:', error);
+      setState(prev => ({ ...prev, isLoading: false }));
+      return { success: false, error: error.message };
+    }
+  };
+
   const signOut = async () => {
     try {
+      await clearOfflineCache();
       await authStorage.clearAuth();
       setState({
         user: null,
@@ -316,6 +373,7 @@ export function useAuth() {
     signIn,
     signInWithEmail,
     registerWithEmail,
+    signInDemo,
     signOut,
     reload: loadStoredAuth,
   };
@@ -371,6 +429,29 @@ export default function LoginScreen({ onLogin }: { onLogin?: () => void }) {
     setIsLoading(true);
     promptAsync();
   };
+
+  const [demoEnabled, setDemoEnabled] = useState(false);
+
+  const handleDemo = async () => {
+    setError(null);
+    setIsLoading(true);
+    const result = await auth.signInDemo();
+    if (result.success) {
+      onLogin?.();
+    } else {
+      setError(result.error || 'Не удалось открыть демо');
+      setIsLoading(false);
+    }
+  };
+
+  // Кнопка демо — только если сервер её поддерживает; по ссылке /demo входим сразу
+  useEffect(() => {
+    fetchDemoEnabled().then(enabled => {
+      setDemoEnabled(enabled);
+      if (enabled && isDemoLink()) handleDemo();
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- один раз при открытии экрана
+  }, []);
 
   const handleEmailAuth = async () => {
     setError(null);
@@ -434,6 +515,28 @@ export default function LoginScreen({ onLogin }: { onLogin?: () => void }) {
 
             {/* Форма входа/регистрации */}
             <View style={styles.formContainer}>
+              {demoEnabled && (
+                <>
+                  <TouchableOpacity
+                    style={[styles.emailButton, { backgroundColor: colors.primary }, isLoading && styles.buttonDisabled]}
+                    onPress={handleDemo}
+                    disabled={isLoading}
+                  >
+                    <Text style={[styles.emailButtonText, { color: colors.background }]}>
+                      Попробовать без регистрации
+                    </Text>
+                  </TouchableOpacity>
+                  <Text style={[styles.demoHint, { color: colors.textSecondary }]}>
+                    Откроется ваша личная песочница с примерами записей, состояний и диалогом с ИИ.
+                    Через сутки она удалится.
+                  </Text>
+                  <View style={styles.divider}>
+                    <View style={[styles.dividerLine, { backgroundColor: isDark ? colors.border : '#E8E1D5' }]} />
+                    <Text style={[styles.dividerText, { color: colors.textSecondary }]}>или войдите</Text>
+                    <View style={[styles.dividerLine, { backgroundColor: isDark ? colors.border : '#E8E1D5' }]} />
+                  </View>
+                </>
+              )}
               {mode === 'register' && (
                 <View style={[styles.inputContainer, { backgroundColor: colors.cardBackground, borderColor: isDark ? colors.border : '#E8E1D5' }]}>
                   <Ionicons name="person-outline" size={20} color={colors.primary} style={styles.inputIcon} />
@@ -656,6 +759,12 @@ const styles = StyleSheet.create({
     color: '#FAF8F5',
     fontSize: 16,
     fontWeight: '600',
+  },
+  demoHint: {
+    fontSize: 13,
+    lineHeight: 18,
+    textAlign: 'center',
+    marginBottom: 8,
   },
   toggleModeButton: {
     paddingVertical: 8,

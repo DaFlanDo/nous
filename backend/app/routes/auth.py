@@ -1,7 +1,7 @@
 """
 Authentication Routes
 """
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, Request
 from datetime import datetime
 import logging
 
@@ -15,6 +15,7 @@ from ..services.auth import (
     validate_email,
     require_auth,
 )
+from ..services.demo import demo_enabled, check_create_quota, create_demo_user, cleanup_expired_demo_users
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/auth", tags=["Authentication"])
@@ -135,15 +136,42 @@ async def login_with_email(request: EmailLoginRequest):
     )
 
 
-@router.get("/me")
-async def get_me(user: User = Depends(require_auth)):
-    """Получить информацию о текущем пользователе"""
+@router.get("/demo")
+async def demo_info():
+    """Фронт по этому ответу решает, показывать ли «Попробовать без регистрации»"""
+    return {"enabled": demo_enabled()}
+
+
+@router.post("/demo", response_model=AuthResponse)
+async def demo_login(request: Request):
+    """Своя песочница с демо-данными, без регистрации — только на демо-стенде"""
+    if not demo_enabled():
+        raise HTTPException(status_code=404, detail="Демо-режим выключен")
+    check_create_quota(request.client.host if request.client else "unknown")
+
+    await cleanup_expired_demo_users()
+    user = await create_demo_user()
+    return AuthResponse(
+        access_token=create_access_token(user.id, user.email),
+        user=_public_user(user),
+    )
+
+
+def _public_user(user: User) -> dict:
     return {
         "id": user.id,
         "email": user.email,
         "name": user.name,
-        "picture": user.picture
+        "picture": user.picture,
+        "is_demo": user.is_demo,
+        "demo_expires_at": user.demo_expires_at.isoformat() + "Z" if user.demo_expires_at else None,
     }
+
+
+@router.get("/me")
+async def get_me(user: User = Depends(require_auth)):
+    """Получить информацию о текущем пользователе"""
+    return _public_user(user)
 
 
 @router.post("/logout")

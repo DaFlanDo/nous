@@ -9,6 +9,7 @@ import logging
 from .config import settings
 from .database import database
 from .services.encryption import init_encryption
+from .services.demo import cleanup_expired_demo_users
 from .routes import (
     auth_router,
     notes_router,
@@ -43,6 +44,9 @@ async def lifespan(app: FastAPI):
     # Initialize encryption
     init_encryption(settings.encryption_key)
     logger.info("Encryption initialized")
+
+    if settings.demo_mode and database.is_connected():
+        await cleanup_expired_demo_users()
     
     # Log configuration
     logger.info(f"OpenAI Base URL: {settings.openai_base_url}")

@@ -139,6 +139,10 @@ async def require_auth(
         if not user_data:
             raise HTTPException(status_code=401, detail="User not found")
         
-        return User(**user_data)
+        user = User(**user_data)
+        # Песочница демо-режима живёт ограниченное время, даже если её ещё не удалили
+        if user.is_demo and user.demo_expires_at and user.demo_expires_at < datetime.utcnow():
+            raise HTTPException(status_code=401, detail="Демо-сессия истекла")
+        return user
     except JWTError:
         raise HTTPException(status_code=401, detail="Invalid token")
